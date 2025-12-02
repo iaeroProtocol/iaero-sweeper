@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+export const runtime = 'edge';
+
 // Proxy 1inch balance API to avoid CORS issues
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
