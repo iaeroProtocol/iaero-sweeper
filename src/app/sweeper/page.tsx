@@ -1399,7 +1399,7 @@ export default function TokenSweeperPage() {
           address: config.swapper,
           abi: SWAPPER_ABI,
           functionName: 'executePlanFromCaller',
-          args: [[swap], recipient],
+          args: [[swap] as const, recipient],
           account: recipient,
         });
         
@@ -1571,7 +1571,7 @@ export default function TokenSweeperPage() {
             address: config.swapper,
             abi: SWAPPER_ABI,
             functionName: 'executePlanFromCaller',
-            args: [[modifiedSwap], recipient],
+            args: [[modifiedSwap] as const, recipient],
             account: recipient,
           });
           gas = (gas * 150n) / 100n; // 50% buffer
@@ -1584,7 +1584,7 @@ export default function TokenSweeperPage() {
           address: config.swapper,
           abi: SWAPPER_ABI,
           functionName: 'executePlanFromCaller',
-          args: [[modifiedSwap], recipient],
+          args: [[modifiedSwap] as const, recipient],
           gas
         });
         
