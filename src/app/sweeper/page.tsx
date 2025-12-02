@@ -321,6 +321,140 @@ const EXTERNAL_SPAM_LISTS: Record<number, string> = {
   59144: 'https://raw.githubusercontent.com/iaeroProtocol/ChainProcessingBot/main/data/spam_tokens_linea.json',
 };
 
+// KNOWN GOOD TOKENS - These will NEVER be filtered as spam
+// Popular DeFi tokens that might temporarily fail price discovery
+const KNOWN_GOOD_TOKENS: Record<number, Set<string>> = {
+  1: new Set([ // Ethereum Mainnet
+    '0xd533a949740bb3306d119cc777fa900ba034cd52', // CRV
+    '0x808507121b80c02388fad14726482e061b8da827', // PENDLE
+    '0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9', // AAVE
+    '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984', // UNI
+    '0xc00e94cb662c3520282e6f5717214004a7f26888', // COMP
+    '0x9f8f72aa9304c8b593d555f12ef6589cc3a579a2', // MKR
+    '0x6b3595068778dd592e39a122f4f5a5cf09c90fe2', // SUSHI
+    '0x0bc529c00c6401aef6d220be8c6ea1667f6ad93e', // YFI
+    '0xc011a73ee8576fb46f5e1c5751ca3b9fe0af2a6f', // SNX
+    '0x4e3fbd56cd56c3e72c1403e103b45db9da5b9d2b', // CVX
+    '0x5a98fcbea516cf06857215779fd812ca3bef1b32', // LDO
+    '0xba100000625a3754423978a60c9317c58a424e3d', // BAL
+    '0x111111111117dc0aa78b770fa6a738034120c302', // 1INCH
+    '0x7d1afa7b718fb893db30a3abc0cfc608aacfebb0', // MATIC
+    '0x514910771af9ca656af840dff83e8264ecf986ca', // LINK
+    '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599', // WBTC
+    '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2', // WETH
+    '0xae78736cd615f374d3085123a210448e74fc6393', // rETH
+    '0xbe9895146f7af43049ca1c1ae358b0541ea49704', // cbETH
+    '0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0', // wstETH
+    '0xae7ab96520de3a18e5e111b5eaab095312d7fe84', // stETH
+    '0x6982508145454ce325ddbe47a25d4ec3d2311933', // PEPE
+    '0x95ad61b0a150d79219dcf64e1e6cc01f0b64c4ce', // SHIB
+    '0xf57e7e7c23978c3caec3c3548e3d615c346e79ff', // IMX
+  ].map(a => a.toLowerCase())),
+  8453: new Set([ // Base
+    '0x940181a94a35a4569e4529a3cdfb74e38fd98631', // AERO
+    '0x2ae3f1ec7f1f5012cfeab0185bfc7aa3cf0dec22', // cbETH
+    '0xc1cba3fcea344f92d9239c08c0568f6f2f0ee452', // wstETH
+    '0xb6fe221fe9eef5aba221c348ba20a1bf5e73624c', // rETH
+    '0x4200000000000000000000000000000000000006', // WETH
+  ].map(a => a.toLowerCase())),
+  42161: new Set([ // Arbitrum
+    '0x912ce59144191c1204e64559fe8253a0e49e6548', // ARB
+    '0x11cdb42b0eb46d95f990bedd4695a6e3fa034978', // CRV
+    '0x0c880f6761f1af8d9aa9c466984b80dab9a8c9e8', // PENDLE
+    '0xfc5a1a6eb076a2c7ad06ed22c90d7e710e35ad0a', // GMX
+    '0x539bde0d7dbd336b79148aa742883198bbf60342', // MAGIC
+    '0x82af49447d8a07e3bd95bd0d56f35241523fbab1', // WETH
+    '0x5979d7b546e38e414f7e9822514be443a4800529', // wstETH
+  ].map(a => a.toLowerCase())),
+  10: new Set([ // Optimism
+    '0x4200000000000000000000000000000000000042', // OP
+    '0x0994206dfe8de6ec6920ff4d779b0d950605fb53', // CRV
+    '0x9560e827af36c94d2ac33a39bce1fe78631088db', // VELO
+    '0x4200000000000000000000000000000000000006', // WETH
+    '0x1f32b1c2345538c0c6f582fcb022739c4a194ebb', // wstETH
+  ].map(a => a.toLowerCase())),
+  137: new Set([ // Polygon
+    '0x172370d5cd63279efa6d502dab29171933a610af', // CRV
+    '0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270', // WMATIC
+    '0x7ceb23fd6bc0add59e62ac25578270cff1b9f619', // WETH
+    '0x53e0bca35ec356bd5dddfebbd1fc0fd03fabad39', // LINK
+  ].map(a => a.toLowerCase())),
+  56: new Set([ // BNB Chain
+    '0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c', // WBNB
+    '0x2170ed0880ac9a755fd29b2688956bd959f933f8', // ETH
+    '0x0e09fabb73bd3ade0a17ecc321fd13a19e81ce82', // CAKE
+  ].map(a => a.toLowerCase())),
+  43114: new Set([ // Avalanche
+    '0xb31f66aa3c1e785363f0875a1b74e27b85fd66c7', // WAVAX
+    '0x49d5c2bdffac6ce2bfdb6640f4f80f226bc10bab', // WETH.e
+    '0x152b9d0fdc40c096757f570a51e494bd4b943e50', // BTC.b
+  ].map(a => a.toLowerCase())),
+};
+
+// Helper to check if token is whitelisted
+function isKnownGoodToken(chainId: number, address: string): boolean {
+  const whitelist = KNOWN_GOOD_TOKENS[chainId];
+  return whitelist ? whitelist.has(address.toLowerCase()) : false;
+}
+
+// KNOWN GOOD SYMBOLS - These tokens will NEVER be marked as spam regardless of chain
+// Includes popular DeFi tokens, LSTs, governance tokens, etc.
+const KNOWN_GOOD_SYMBOLS = new Set([
+  // Major DeFi governance tokens
+  'CRV', 'CVX', 'AAVE', 'UNI', 'SUSHI', 'COMP', 'MKR', 'YFI', 'BAL', '1INCH', 'SNX', 'LDO',
+  // Pendle ecosystem
+  'PENDLE',
+  // Liquid staking
+  'STETH', 'WSTETH', 'RETH', 'CBETH', 'SFRXETH', 'FRXETH', 'ANKRETH', 'SWETH', 'ETHX',
+  'METH', 'EETH', 'WEETH', 'RSETH', 'EZETH', 'PUFETH',
+  // Major L1/L2 tokens
+  'WETH', 'WBTC', 'WMATIC', 'WAVAX', 'WBNB', 'ARB', 'OP', 'MATIC', 'AVAX', 'ETH', 'BTC',
+  // Stablecoins
+  'USDC', 'USDT', 'DAI', 'FRAX', 'LUSD', 'SUSD', 'BUSD', 'TUSD', 'USDP', 'GHO', 'CRVUSD', 'PYUSD',
+  'USDE', 'SUSDE', 'ENA', 'SENA',
+  // Popular tokens
+  'LINK', 'GRT', 'ENS', 'APE', 'SHIB', 'PEPE', 'DOGE', 'IMX', 'BLUR', 'RNDR', 'FET', 'OCEAN',
+  // DEX tokens
+  'AERO', 'VELO', 'GMX', 'JOE', 'CAKE', 'QUICK', 'MAGIC',
+  // Restaking
+  'EIGEN', 'PZETH',
+  // Morpho
+  'MORPHO',
+  // Real yield
+  'GLP', 'SGLP',
+]);
+
+// Check if a symbol matches known good patterns
+function isKnownGoodSymbol(symbol: string): boolean {
+  if (!symbol) return false;
+  const upper = symbol.toUpperCase();
+  
+  // Direct match
+  if (KNOWN_GOOD_SYMBOLS.has(upper)) return true;
+  
+  // Pendle tokens (PT-xxx, YT-xxx, SY-xxx) - ALWAYS protected
+  if (upper.startsWith('PT-') || upper.startsWith('YT-') || upper.startsWith('SY-')) return true;
+  
+  // Curve LP tokens often contain CRV
+  if (upper.includes('CRV') || upper.includes('CURVE')) return true;
+  
+  // Convex tokens
+  if (upper.startsWith('CVX')) return true;
+  
+  // Aave tokens (aTokens)
+  if (upper.match(/^A[A-Z]+V[23]?$/)) return true; // aUSDCV3, aWETHV2, etc.
+  
+  // Compound tokens (cTokens)
+  if (upper.match(/^C[A-Z]+$/)) return true; // cUSDC, cETH, etc.
+  
+  return false;
+}
+
+// Combined check: address OR symbol
+function isProtectedToken(chainId: number, address: string, symbol: string): boolean {
+  return isKnownGoodToken(chainId, address) || isKnownGoodSymbol(symbol);
+}
+
 // In-memory cache for external spam lists (avoids refetching within session)
 const externalSpamCache: Map<number, { addresses: Set<string>; timestamp: number }> = new Map();
 
@@ -580,9 +714,16 @@ function markTokenAsFailed(chainId: number, tokenAddress: string): void {
 function clearFailedTokensCache(chainId: number): void {
   if (typeof window === 'undefined') return;
   try {
+    // Clear the spam list
     const key = getFailedTokensCacheKey(chainId);
     localStorage.removeItem(key);
     console.log('🗑️ Cleared failed tokens cache');
+    
+    // ALSO clear the price failure counts - this is critical!
+    // Otherwise tokens will hit the threshold immediately on next scan
+    const priceFailKey = `sweeper_price_failures_${chainId}`;
+    localStorage.removeItem(priceFailKey);
+    console.log('🗑️ Cleared price failure counts');
   } catch (e) {
     console.warn('Failed to clear failed tokens cache:', e);
   }
@@ -590,7 +731,7 @@ function clearFailedTokensCache(chainId: number): void {
 
 // Track tokens that fail to get prices (no liquidity)
 // After PRICE_FAIL_THRESHOLD consecutive failures, auto-mark as spam
-const PRICE_FAIL_THRESHOLD = 2;
+const PRICE_FAIL_THRESHOLD = 5; // Increased from 2 - legitimate tokens can have temporary failures
 
 function getPriceFailureCacheKey(chainId: number): string {
   return `sweeper_price_failures_${chainId}`;
@@ -960,6 +1101,9 @@ export default function TokenSweeperPage() {
       
       setProgressStep('Loading spam lists...');
       
+      // Log all tokens found for debugging
+      console.log(`📋 All ${rawTokens.length} tokens in wallet:`, rawTokens.map(t => t.symbol).join(', '));
+      
       // Get combined spam list (external GitHub list + runtime failures)
       const spamTokens = await getAllSpamTokens(chainId);
       
@@ -967,10 +1111,25 @@ export default function TokenSweeperPage() {
       const spamPatterns = getSpamPatterns(chainId);
       
       // Pre-filter raw tokens to remove spam BEFORE price fetching
+      // BUT always keep whitelisted tokens (known good DeFi tokens)
       let patternMatches = 0;
+      let whitelistSaved = 0;
       const nonSpamRawTokens = rawTokens.filter(t => {
+        const addrLower = t.address.toLowerCase();
+        
+        // ALWAYS keep whitelisted tokens (CRV, PENDLE, AAVE, etc.) - check by address OR symbol
+        if (isProtectedToken(chainId, addrLower, t.symbol)) {
+          if (spamTokens.has(addrLower)) {
+            whitelistSaved++;
+            console.log(`✅ Whitelist saved: ${t.symbol} (was in spam list)`);
+          }
+          return true;
+        }
+        
         // Check address blacklist
-        if (spamTokens.has(t.address.toLowerCase())) {
+        if (spamTokens.has(addrLower)) {
+          // Log what's being filtered so we can debug
+          console.log(`🚫 Filtering spam: ${t.symbol} (${t.address.slice(0, 10)}...)`);
           return false;
         }
         // Check symbol patterns (heuristic detection)
@@ -987,6 +1146,9 @@ export default function TokenSweeperPage() {
       const spamRemoved = rawTokens.length - nonSpamRawTokens.length;
       if (spamRemoved > 0) {
         console.log(`🧹 Pre-filtered ${spamRemoved} spam tokens (${patternMatches} by pattern)`);
+      }
+      if (whitelistSaved > 0) {
+        console.log(`✅ Whitelist protected ${whitelistSaved} known good tokens`);
       }
       
       setProgressStep('Fetching market prices...');
@@ -1248,6 +1410,7 @@ export default function TokenSweeperPage() {
     // Track failures for summary
     const failedTokens: { address: string; symbol: string; reason: string }[] = [];
     const autoSpammed: string[] = [];
+    const tokensNeedingFallback: Array<{ address: Address; decimals: number; balance: bigint; symbol: string }> = [];
     
     // Process in batches of 5 to avoid rate limiting
     const BATCH_SIZE = 5;
@@ -1261,6 +1424,8 @@ export default function TokenSweeperPage() {
       
       // Fetch all quotes in batch in parallel
       const batchPromises = batch.map(async (token) => {
+        const isWhitelisted = isKnownGoodToken(chainId, token.address);
+        
         try {
           const refAmount = parseUnits('1', token.decimals);
           
@@ -1274,13 +1439,8 @@ export default function TokenSweeperPage() {
           
           const res = await fetch(`/api/0x/quote?${params}`);
           if (!res.ok) {
-            failedTokens.push({ address: token.address, symbol: token.symbol, reason: `HTTP ${res.status}` });
-            // Track failure
-            const failCount = incrementPriceFailure(chainId, token.address);
-            if (failCount >= PRICE_FAIL_THRESHOLD) {
-              markTokenAsFailed(chainId, token.address);
-              autoSpammed.push(`${token.symbol} (${token.address.slice(0, 10)}...)`);
-            }
+            // Queue for DefiLlama fallback instead of immediate failure
+            tokensNeedingFallback.push(token);
             return null;
           }
           
@@ -1295,21 +1455,12 @@ export default function TokenSweeperPage() {
             return { address: token.address.toLowerCase(), price: pricePerToken };
           }
           
-          // No buyAmount = no liquidity
-          failedTokens.push({ address: token.address, symbol: token.symbol, reason: 'no liquidity' });
-          const failCount = incrementPriceFailure(chainId, token.address);
-          if (failCount >= PRICE_FAIL_THRESHOLD) {
-            markTokenAsFailed(chainId, token.address);
-            autoSpammed.push(`${token.symbol} (${token.address.slice(0, 10)}...)`);
-          }
+          // No buyAmount = queue for DefiLlama fallback
+          tokensNeedingFallback.push(token);
           return null;
         } catch (err: any) {
-          failedTokens.push({ address: token.address, symbol: token.symbol, reason: err.message?.slice(0, 30) || 'error' });
-          const failCount = incrementPriceFailure(chainId, token.address);
-          if (failCount >= PRICE_FAIL_THRESHOLD) {
-            markTokenAsFailed(chainId, token.address);
-            autoSpammed.push(`${token.symbol} (${token.address.slice(0, 10)}...)`);
-          }
+          // Queue for DefiLlama fallback
+          tokensNeedingFallback.push(token);
           return null;
         }
       });
@@ -1326,6 +1477,44 @@ export default function TokenSweeperPage() {
       // Delay between batches (skip delay after last batch)
       if (i + BATCH_SIZE < tokens.length) {
         await new Promise(r => setTimeout(r, BATCH_DELAY));
+      }
+    }
+    
+    // Try DefiLlama fallback for tokens that failed 0x
+    if (tokensNeedingFallback.length > 0) {
+      console.log(`  🔄 Trying DefiLlama fallback for ${tokensNeedingFallback.length} tokens...`);
+      onProgress?.(`Fallback price lookup (${tokensNeedingFallback.length} tokens)...`);
+      
+      const llamaPrices = await fetchDefiLlamaPrices(
+        tokensNeedingFallback.map(t => t.address as Address),
+        chainId
+      );
+      
+      for (const token of tokensNeedingFallback) {
+        const llamaPrice = llamaPrices[token.address.toLowerCase()];
+        const isWhitelisted = isProtectedToken(chainId, token.address, token.symbol);
+        
+        if (llamaPrice && llamaPrice > 0) {
+          // DefiLlama succeeded - use this price
+          prices[token.address.toLowerCase()] = llamaPrice;
+          clearPriceFailure(chainId, token.address);
+          console.log(`    ✅ ${token.symbol}: $${llamaPrice.toFixed(4)} (DefiLlama)`);
+        } else {
+          // Both 0x and DefiLlama failed
+          failedTokens.push({ address: token.address, symbol: token.symbol, reason: 'no price data' });
+          
+          // NEVER mark whitelisted tokens as spam (check by address OR symbol)
+          if (isWhitelisted) {
+            console.log(`    ⚠️ ${token.symbol}: No price, but PROTECTED (whitelist)`);
+          } else {
+            // Track failure for non-whitelisted tokens
+            const failCount = incrementPriceFailure(chainId, token.address);
+            if (failCount >= PRICE_FAIL_THRESHOLD) {
+              markTokenAsFailed(chainId, token.address);
+              autoSpammed.push(`${token.symbol} (${token.address.slice(0, 10)}...)`);
+            }
+          }
+        }
       }
     }
     
