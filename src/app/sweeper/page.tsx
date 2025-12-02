@@ -245,6 +245,10 @@ interface TokenInfo {
   logoUrl?: string;
 }
 
+interface TokenWithAmount extends TokenInfo {
+  amountToSwap: bigint;
+}
+
 interface SwapQuote {
   token: TokenInfo;
   buyAmount: bigint;
@@ -700,6 +704,14 @@ interface FailedQuoteItem {
   error: string;
 }
 
+interface QuotePreviewData {
+  quotes: QuotePreviewItem[];
+  failedQuotes: FailedQuoteItem[];
+  outputToken: 'USDC' | 'WETH';
+  outputPrice: number;
+  outputDecimals: number;
+}
+
 // ============================================================================
 // UTILITY FUNCTIONS
 // ============================================================================
@@ -783,13 +795,7 @@ export default function TokenSweeperPage() {
   
   // Quote preview modal
   const [showQuotePreview, setShowQuotePreview] = useState(false);
-  const [quotePreviewData, setQuotePreviewData] = useState<{
-    quotes: QuotePreviewItem[];
-    failedQuotes: FailedQuoteItem[];
-    outputToken: 'USDC' | 'WETH';
-    outputPrice: number;
-    outputDecimals: number;
-  } | null>(null);
+  const [quotePreviewData, setQuotePreviewData] = useState<QuotePreviewData | null>(null);
   
   // Transaction results
   const [txHash, setTxHash] = useState<string | null>(null);
@@ -827,7 +833,7 @@ export default function TokenSweeperPage() {
   // Remove output token from selection when output token changes
   useEffect(() => {
     const outputTokenAddr = outputToken === 'USDC' ? config.usdc : config.weth;
-    setSelectedTokens(prev => {
+    setSelectedTokens((prev: Set<string>) => {
       const newSet = new Set(prev);
       newSet.delete(outputTokenAddr);
       // Also handle lowercase comparison
@@ -863,7 +869,8 @@ export default function TokenSweeperPage() {
           // Merge manual tokens into cached list (they may have been added after caching)
           if (manualTokens.size > 0) {
             const cachedAddrs = new Set(rawTokens.map(t => t.address.toLowerCase()));
-            const missingManual = Array.from(manualTokens).filter(addr => !cachedAddrs.has(addr.toLowerCase()));
+            const manualArray: string[] = [...manualTokens];
+            const missingManual = manualArray.filter((addr: string) => !cachedAddrs.has(addr.toLowerCase()));
             
             if (missingManual.length > 0) {
               console.log(`📌 Fetching ${missingManual.length} manual tokens not in cache...`);
@@ -988,7 +995,7 @@ export default function TokenSweeperPage() {
       const outputTokenAddr = config.usdc;
       
       // Check which tokens need price fetching
-      const tokensNeedingPrices: Array<{ address: Address; decimals: number; balance: bigint }> = [];
+      const tokensNeedingPrices: Array<{ address: Address; decimals: number; balance: bigint; symbol: string }> = [];
       const cachedPrices: Record<string, number> = {};
       
       for (const t of nonSpamRawTokens) {
@@ -1002,7 +1009,8 @@ export default function TokenSweeperPage() {
           tokensNeedingPrices.push({
             address: t.address as Address,
             decimals: t.decimals,
-            balance: BigInt(t.balance)
+            balance: BigInt(t.balance),
+            symbol: t.symbol
           });
         }
       }
@@ -1218,7 +1226,7 @@ export default function TokenSweeperPage() {
 
   // Fetch prices from 0x quotes (accurate market prices) - batched for speed
   async function fetchMarketPrices(
-    tokens: Array<{ address: Address; decimals: number; balance: bigint }>,
+    tokens: Array<{ address: Address; decimals: number; balance: bigint; symbol: string }>,
     chainId: number,
     outputToken: Address,
     onProgress?: (msg: string) => void
@@ -1613,8 +1621,8 @@ export default function TokenSweeperPage() {
       
       // Get selected tokens with amounts
       const tokensToSwap = tokens
-        .filter(t => selectedTokens.has(t.address))
-        .map(t => {
+        .filter((t: TokenInfo) => selectedTokens.has(t.address))
+        .map((t: TokenInfo) => {
           const customInput = customAmounts[t.address];
           let amountToSwap = t.balance;
           
@@ -1627,7 +1635,7 @@ export default function TokenSweeperPage() {
           
           return { ...t, amountToSwap };
         })
-        .filter(t => t.amountToSwap > 0n);
+        .filter((t: TokenInfo & { amountToSwap: bigint }) => t.amountToSwap > 0n);
       
       if (tokensToSwap.length === 0) {
         setError('No tokens to swap');
@@ -1666,10 +1674,10 @@ export default function TokenSweeperPage() {
         const totalBatches = Math.ceil(tokensToSwap.length / QUOTE_BATCH_SIZE);
         
         setProgressStep(`Fetching quotes (batch ${batchNum}/${totalBatches})...`);
-        console.log(`  Batch ${batchNum}/${totalBatches}: ${batch.map(t => t.symbol).join(', ')}`);
+        console.log(`  Batch ${batchNum}/${totalBatches}: ${batch.map((t: TokenWithAmount) => t.symbol).join(', ')}`);
         
         // Fetch main quotes for this batch in parallel
-        const mainQuotePromises = batch.map(async (token) => {
+        const mainQuotePromises = batch.map(async (token: TokenWithAmount) => {
           try {
             const quote = await fetch0xQuote(
               chainId,
@@ -1678,9 +1686,9 @@ export default function TokenSweeperPage() {
               token.amountToSwap,
               config.swapper
             );
-            return { token, quote, error: null };
+            return { token, quote, error: null as string | null };
           } catch (err: any) {
-            return { token, quote: null, error: err.message || 'Quote failed' };
+            return { token, quote: null as any, error: err.message || 'Quote failed' };
           }
         });
         
@@ -1690,9 +1698,9 @@ export default function TokenSweeperPage() {
         await new Promise(r => setTimeout(r, 300));
         
         // Fetch reference quotes for successful main quotes in parallel
-        const tokensNeedingRef = mainResults.filter(r => r.quote?.transaction?.data);
+        const tokensNeedingRef = mainResults.filter((r: { token: TokenWithAmount; quote: any; error: string | null }) => r.quote?.transaction?.data);
         
-        const refQuotePromises = tokensNeedingRef.map(async ({ token, quote }) => {
+        const refQuotePromises = tokensNeedingRef.map(async ({ token, quote }: { token: TokenWithAmount; quote: any }) => {
           try {
             // Use a small amount to get market rate (~$1 worth, minimal slippage)
             const tokenPriceEstimate = token.valueUsd / Number(formatUnits(token.amountToSwap, token.decimals));
@@ -1812,11 +1820,11 @@ export default function TokenSweeperPage() {
   const toggleQuoteSelection = useCallback((tokenAddress: string) => {
     if (!quotePreviewData) return;
     
-    setQuotePreviewData(prev => {
+    setQuotePreviewData((prev: QuotePreviewData | null) => {
       if (!prev) return prev;
       return {
         ...prev,
-        quotes: prev.quotes.map(q => 
+        quotes: prev.quotes.map((q: QuotePreviewItem) => 
           q.token.address === tokenAddress 
             ? { ...q, selected: !q.selected }
             : q
@@ -1829,11 +1837,11 @@ export default function TokenSweeperPage() {
   const toggleForceSlippage = useCallback((tokenAddress: string) => {
     if (!quotePreviewData) return;
     
-    setQuotePreviewData(prev => {
+    setQuotePreviewData((prev: QuotePreviewData | null) => {
       if (!prev) return prev;
       return {
         ...prev,
-        quotes: prev.quotes.map(q => 
+        quotes: prev.quotes.map((q: QuotePreviewItem) => 
           q.token.address === tokenAddress 
             ? { ...q, forceHighSlippage: !q.forceHighSlippage }
             : q
@@ -1846,17 +1854,17 @@ export default function TokenSweeperPage() {
   const executeConfirmedSwaps = useCallback(async () => {
     if (!address || !publicClient || !quotePreviewData) return;
     
-    const selectedQuotes = quotePreviewData.quotes.filter(q => q.selected);
+    const selectedQuotes = quotePreviewData.quotes.filter((q: QuotePreviewItem) => q.selected);
     if (selectedQuotes.length === 0) {
       setError('No tokens selected for swap');
       return;
     }
     
     // Separate high-impact tokens that need Force but don't have it
-    const executableQuotes = selectedQuotes.filter(q => 
+    const executableQuotes = selectedQuotes.filter((q: QuotePreviewItem) => 
       q.lossPercent <= 5 || q.forceHighSlippage
     );
-    const skippedHighImpact = selectedQuotes.filter(q => 
+    const skippedHighImpact = selectedQuotes.filter((q: QuotePreviewItem) => 
       q.lossPercent > 5 && !q.forceHighSlippage
     );
     
@@ -1907,7 +1915,7 @@ export default function TokenSweeperPage() {
         args: [address]
       }) as bigint;
       
-      const tokensToSwap = executableQuotes.map(q => q.token);
+      const tokensToSwap = executableQuotes.map((q: QuotePreviewItem) => q.token);
 
       // Step 1: Check and do approvals (track if any were needed)
       setProgressStep(`Checking approvals...`);
@@ -1973,7 +1981,7 @@ export default function TokenSweeperPage() {
 
       // Filter out tokens that failed approval
       let quotesToExecute = executableQuotes.filter(
-        sq => !failedTokens.has(sq.token.address.toLowerCase())
+        (sq: QuotePreviewItem) => !failedTokens.has(sq.token.address.toLowerCase())
       );
       
       if (quotesToExecute.length === 0) {
@@ -1997,7 +2005,7 @@ export default function TokenSweeperPage() {
           setProgressStep(`Refreshing quotes (${batchNum}/${totalBatches})...`);
           
           // Fetch all quotes in this batch in parallel
-          const quotePromises = batch.map(async (sq) => {
+          const quotePromises = batch.map(async (sq: QuotePreviewItem) => {
             try {
               const freshQuote = await fetch0xQuote(
                 chainId,
@@ -2082,11 +2090,11 @@ export default function TokenSweeperPage() {
         const batchQuotes = quotesToExecute.slice(batchStart, batchStart + EXECUTION_BATCH_SIZE);
         const batchNum = Math.floor(batchStart / EXECUTION_BATCH_SIZE) + 1;
         
-        console.log(`\n📦 Batch ${batchNum}/${totalBatches}: ${batchQuotes.map(sq => sq.token.symbol).join(', ')}`);
+        console.log(`\n📦 Batch ${batchNum}/${totalBatches}: ${batchQuotes.map((sq: QuotePreviewItem) => sq.token.symbol).join(', ')}`);
         
         // Build swap plan for this batch
         setProgressStep(`Batch ${batchNum}/${totalBatches}: Building plan...`);
-        const batchPlan: SwapStep[] = batchQuotes.map(sq => {
+        const batchPlan: SwapStep[] = batchQuotes.map((sq: QuotePreviewItem) => {
           const q = sq.quote;
           const encodedData = encodeAbiParameters(
             [{ type: 'address' }, { type: 'bytes' }],
@@ -2415,14 +2423,14 @@ export default function TokenSweeperPage() {
   // Filter out the currently selected output token from display
   const displayTokens = useMemo(() => {
     const outputTokenAddr = outputToken === 'USDC' ? config.usdc : config.weth;
-    return tokens.filter(t => t.address.toLowerCase() !== outputTokenAddr.toLowerCase());
+    return tokens.filter((t: TokenInfo) => t.address.toLowerCase() !== outputTokenAddr.toLowerCase());
   }, [tokens, outputToken, config]);
 
   const totalSelectedValue = useMemo(() => {
     const outputTokenAddr = outputToken === 'USDC' ? config.usdc : config.weth;
     return tokens
-      .filter(t => selectedTokens.has(t.address) && t.address.toLowerCase() !== outputTokenAddr.toLowerCase())
-      .reduce((sum, t) => {
+      .filter((t: TokenInfo) => selectedTokens.has(t.address) && t.address.toLowerCase() !== outputTokenAddr.toLowerCase())
+      .reduce((sum: number, t: TokenInfo) => {
         const customInput = customAmounts[t.address];
         if (customInput) {
           try {
@@ -2486,26 +2494,26 @@ export default function TokenSweeperPage() {
                   <p className="text-xs text-slate-400">Input Value</p>
                   <p className="text-lg font-bold text-white">
                     {formatUSD(quotePreviewData.quotes
-                      .filter(q => q.selected)
-                      .reduce((sum, q) => sum + q.inputValueUsd, 0))}
+                      .filter((q: QuotePreviewItem) => q.selected)
+                      .reduce((sum: number, q: QuotePreviewItem) => sum + q.inputValueUsd, 0))}
                   </p>
                 </div>
                 <div className="bg-slate-900/50 rounded-lg p-3">
                   <p className="text-xs text-slate-400">You'll Receive</p>
                   <p className="text-lg font-bold text-emerald-400">
                     {formatUSD(quotePreviewData.quotes
-                      .filter(q => q.selected)
-                      .reduce((sum, q) => sum + q.quotedOutputUsd, 0))}
+                      .filter((q: QuotePreviewItem) => q.selected)
+                      .reduce((sum: number, q: QuotePreviewItem) => sum + q.quotedOutputUsd, 0))}
                   </p>
                 </div>
                 <div className="bg-slate-900/50 rounded-lg p-3">
                   <p className="text-xs text-slate-400">Price Impact</p>
                   {(() => {
-                    const selectedQuotes = quotePreviewData.quotes.filter(q => q.selected);
+                    const selectedQuotes = quotePreviewData.quotes.filter((q: QuotePreviewItem) => q.selected);
                     // Weighted average price impact
-                    const totalInput = selectedQuotes.reduce((sum, q) => sum + q.inputValueUsd, 0);
+                    const totalInput = selectedQuotes.reduce((sum: number, q: QuotePreviewItem) => sum + q.inputValueUsd, 0);
                     const weightedImpact = totalInput > 0 
-                      ? selectedQuotes.reduce((sum, q) => sum + (q.lossPercent * q.inputValueUsd), 0) / totalInput
+                      ? selectedQuotes.reduce((sum: number, q: QuotePreviewItem) => sum + (q.lossPercent * q.inputValueUsd), 0) / totalInput
                       : 0;
                     return (
                       <p className={`text-lg font-bold ${weightedImpact > 2 ? 'text-red-400' : weightedImpact > 0.5 ? 'text-yellow-400' : 'text-emerald-400'}`}>
@@ -2530,7 +2538,7 @@ export default function TokenSweeperPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-700/50">
-                  {quotePreviewData.quotes.map((quoteData, idx) => (
+                  {quotePreviewData.quotes.map((quoteData: QuotePreviewItem, idx: number) => (
                     <tr 
                       key={idx} 
                       className={`hover:bg-slate-700/30 transition-colors ${!quoteData.selected ? 'opacity-50' : ''}`}
@@ -2592,7 +2600,7 @@ export default function TokenSweeperPage() {
                   ))}
                   
                   {/* Failed quotes */}
-                  {quotePreviewData.failedQuotes.map((fq, idx) => (
+                  {quotePreviewData.failedQuotes.map((fq: FailedQuoteItem, idx: number) => (
                     <tr key={`failed-${idx}`} className="opacity-50">
                       <td className="py-3 pl-2">
                         <input type="checkbox" disabled className="w-4 h-4 rounded border-slate-600 bg-slate-800" />
@@ -2628,21 +2636,21 @@ export default function TokenSweeperPage() {
             </div>
             
             {/* Warning for high price impact */}
-            {quotePreviewData.quotes.some(q => q.selected && q.lossPercent > 5) && (
+            {quotePreviewData.quotes.some((q: QuotePreviewItem) => q.selected && q.lossPercent > 5) && (
               <div className="mx-4 mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
                 <div className="flex items-center gap-2 text-red-400">
                   <AlertTriangle className="w-4 h-4" />
                   <span className="text-sm font-medium">
-                    {quotePreviewData.quotes.some(q => q.selected && q.lossPercent > 5 && !q.forceHighSlippage) 
-                      ? <>High-impact tokens ({quotePreviewData.quotes.filter(q => q.selected && q.lossPercent > 5 && !q.forceHighSlippage).length}) require "Force" to swap. Click the Force button or they will be skipped.</>
+                    {quotePreviewData.quotes.some((q: QuotePreviewItem) => q.selected && q.lossPercent > 5 && !q.forceHighSlippage) 
+                      ? <>High-impact tokens ({quotePreviewData.quotes.filter((q: QuotePreviewItem) => q.selected && q.lossPercent > 5 && !q.forceHighSlippage).length}) require "Force" to swap. Click the Force button or they will be skipped.</>
                       : <>Some tokens have &gt;5% price impact.</>
                     }
                   </span>
                 </div>
-                {quotePreviewData.quotes.some(q => q.selected && q.forceHighSlippage) && (
+                {quotePreviewData.quotes.some((q: QuotePreviewItem) => q.selected && q.forceHighSlippage) && (
                   <div className="mt-2 text-xs text-orange-400">
-                    ⚠️ Force enabled for {quotePreviewData.quotes.filter(q => q.selected && q.forceHighSlippage).length} token(s) — 
-                    these will execute with higher slippage tolerance (~{Math.max(...quotePreviewData.quotes.filter(q => q.selected && q.forceHighSlippage).map(q => Math.ceil(q.lossPercent + 10)))}%).
+                    ⚠️ Force enabled for {quotePreviewData.quotes.filter((q: QuotePreviewItem) => q.selected && q.forceHighSlippage).length} token(s) — 
+                    these will execute with higher slippage tolerance (~{Math.max(...quotePreviewData.quotes.filter((q: QuotePreviewItem) => q.selected && q.forceHighSlippage).map((q: QuotePreviewItem) => Math.ceil(q.lossPercent + 10)))}%).
                   </div>
                 )}
               </div>
@@ -2661,12 +2669,12 @@ export default function TokenSweeperPage() {
               </button>
               <button
                 onClick={executeConfirmedSwaps}
-                disabled={!quotePreviewData.quotes.some(q => q.selected && (q.lossPercent <= 5 || q.forceHighSlippage))}
+                disabled={!quotePreviewData.quotes.some((q: QuotePreviewItem) => q.selected && (q.lossPercent <= 5 || q.forceHighSlippage))}
                 className="flex-1 py-3 px-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 disabled:from-slate-600 disabled:to-slate-600 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-all duration-200"
               >
                 {(() => {
-                  const executable = quotePreviewData.quotes.filter(q => q.selected && (q.lossPercent <= 5 || q.forceHighSlippage)).length;
-                  const skipped = quotePreviewData.quotes.filter(q => q.selected && q.lossPercent > 5 && !q.forceHighSlippage).length;
+                  const executable = quotePreviewData.quotes.filter((q: QuotePreviewItem) => q.selected && (q.lossPercent <= 5 || q.forceHighSlippage)).length;
+                  const skipped = quotePreviewData.quotes.filter((q: QuotePreviewItem) => q.selected && q.lossPercent > 5 && !q.forceHighSlippage).length;
                   return skipped > 0 
                     ? `Confirm Sweep (${executable} tokens, ${skipped} skipped)`
                     : `Confirm Sweep (${executable} tokens)`;
@@ -2713,8 +2721,8 @@ export default function TokenSweeperPage() {
                   <p className="text-xs text-slate-400">Total Input Value</p>
                   <p className="text-lg font-bold text-white">
                     {formatUSD(detailedResults
-                      .filter(r => r.status === 'success')
-                      .reduce((sum, r) => sum + r.inputValueUsd, 0))}
+                      .filter((r: SwapResultDetail) => r.status === 'success')
+                      .reduce((sum: number, r: SwapResultDetail) => sum + r.inputValueUsd, 0))}
                   </p>
                 </div>
                 <div className="bg-slate-900/50 rounded-lg p-3">
@@ -2726,8 +2734,8 @@ export default function TokenSweeperPage() {
                 <div className="bg-slate-900/50 rounded-lg p-3">
                   <p className="text-xs text-slate-400">Price Impact</p>
                   {(() => {
-                    const successfulResults = detailedResults.filter(r => r.status === 'success');
-                    const totalInput = successfulResults.reduce((sum, r) => sum + r.inputValueUsd, 0);
+                    const successfulResults = detailedResults.filter((r: SwapResultDetail) => r.status === 'success');
+                    const totalInput = successfulResults.reduce((sum: number, r: SwapResultDetail) => sum + r.inputValueUsd, 0);
                     const totalReceived = swapResults?.totalValue || 0;
                     // Positive = gain (received more than input), Negative = loss
                     const impactPercent = totalInput > 0 ? ((totalReceived - totalInput) / totalInput) * 100 : 0;
@@ -2783,7 +2791,7 @@ export default function TokenSweeperPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-700/50">
-                  {detailedResults.map((result, idx) => {
+                  {detailedResults.map((result: SwapResultDetail, idx: number) => {
                     // Calculate impact: positive = gain, negative = loss
                     const impactPercent = result.inputValueUsd > 0 
                       ? ((result.quotedOutputUsd - result.inputValueUsd) / result.inputValueUsd) * 100
@@ -3055,8 +3063,8 @@ export default function TokenSweeperPage() {
                       type="text"
                       placeholder="Add token by address (0x...)"
                       value={manualTokenInput}
-                      onChange={(e) => setManualTokenInput(e.target.value)}
-                      onKeyDown={async (e) => {
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setManualTokenInput(e.target.value)}
+                      onKeyDown={async (e: React.KeyboardEvent<HTMLInputElement>) => {
                         if (e.key === 'Enter' && manualTokenInput.match(/^0x[a-fA-F0-9]{40}$/) && publicClient && address) {
                           const addr = manualTokenInput.toLowerCase() as Address;
                           
@@ -3083,8 +3091,8 @@ export default function TokenSweeperPage() {
                               newToken.valueUsd = balanceNum * newToken.price;
                               
                               // Add to tokens list (avoid duplicates)
-                              setTokens(prev => {
-                                const exists = prev.some(t => t.address.toLowerCase() === addr);
+                              setTokens((prev: TokenInfo[]) => {
+                                const exists = prev.some((t: TokenInfo) => t.address.toLowerCase() === addr);
                                 if (exists) return prev;
                                 return [...prev, newToken].sort((a, b) => b.valueUsd - a.valueUsd);
                               });
@@ -3127,8 +3135,8 @@ export default function TokenSweeperPage() {
                               newToken.price = prices[addr.toLowerCase()] || 0;
                               newToken.valueUsd = balanceNum * newToken.price;
                               
-                              setTokens(prev => {
-                                const exists = prev.some(t => t.address.toLowerCase() === addr);
+                              setTokens((prev: TokenInfo[]) => {
+                                const exists = prev.some((t: TokenInfo) => t.address.toLowerCase() === addr);
                                 if (exists) return prev;
                                 return [...prev, newToken].sort((a, b) => b.valueUsd - a.valueUsd);
                               });
@@ -3173,7 +3181,7 @@ export default function TokenSweeperPage() {
                 {/* Manual tokens list (expandable) */}
                 {manualTokens.size > 0 && (
                   <div className="mt-2 flex flex-wrap gap-2">
-                    {Array.from(manualTokens).map(addr => (
+                    {[...manualTokens].map((addr: string) => (
                       <div 
                         key={addr}
                         className="flex items-center gap-1.5 px-2 py-1 bg-emerald-600/20 text-emerald-300 text-xs rounded-lg border border-emerald-500/30"
@@ -3222,7 +3230,7 @@ export default function TokenSweeperPage() {
                       </span>
                       <div className="flex gap-2">
                         <button
-                          onClick={() => setSelectedTokens(new Set(displayTokens.map(t => t.address)))}
+                          onClick={() => setSelectedTokens(new Set(displayTokens.map((t: TokenInfo) => t.address)))}
                           className="text-xs text-emerald-400 hover:text-emerald-300"
                         >
                           Select All
@@ -3239,7 +3247,7 @@ export default function TokenSweeperPage() {
 
                     {/* Token Grid */}
                     <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
-                      {displayTokens.map(token => {
+                      {displayTokens.map((token: TokenInfo) => {
                         const isSelected = selectedTokens.has(token.address);
                         const customAmount = customAmounts[token.address] || '';
                         
@@ -3297,13 +3305,13 @@ export default function TokenSweeperPage() {
                               
                               {/* Mark as Spam button */}
                               <button
-                                onClick={(e) => {
+                                onClick={(e: React.MouseEvent) => {
                                   e.stopPropagation();
                                   markTokenAsFailed(chainId, token.address);
                                   // Remove from tokens list
-                                  setTokens(prev => prev.filter(t => t.address !== token.address));
+                                  setTokens((prev: TokenInfo[]) => prev.filter((t: TokenInfo) => t.address !== token.address));
                                   // Remove from selection
-                                  setSelectedTokens(prev => {
+                                  setSelectedTokens((prev: Set<string>) => {
                                     const next = new Set(prev);
                                     next.delete(token.address);
                                     return next;
@@ -3324,8 +3332,8 @@ export default function TokenSweeperPage() {
                                   type="text"
                                   placeholder={token.balanceFormatted}
                                   value={customAmount}
-                                  onChange={(e) => {
-                                    setCustomAmounts(prev => ({
+                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                                    setCustomAmounts((prev: Record<string, string>) => ({
                                       ...prev,
                                       [token.address]: e.target.value
                                     }));
@@ -3334,7 +3342,7 @@ export default function TokenSweeperPage() {
                                 />
                                 <button
                                   onClick={() => {
-                                    setCustomAmounts(prev => {
+                                    setCustomAmounts((prev: Record<string, string>) => {
                                       const copy = { ...prev };
                                       delete copy[token.address];
                                       return copy;

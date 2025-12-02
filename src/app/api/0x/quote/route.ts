@@ -6,6 +6,9 @@ export const runtime = 'edge';
 const SWAP_FEE_BPS = process.env.SWAP_FEE_BPS || "5";
 const SWAP_FEE_RECIPIENT = process.env.SWAP_FEE_RECIPIENT || "0xe6e7d3c6379ad80de02f26ccc72605d0f70d5201"; // Treasury
 
+// Default slippage if not specified - 30 bps = 0.3%
+const DEFAULT_SLIPPAGE_BPS = "30";
+
 export async function GET(request: NextRequest) {
   const originalParams = request.nextUrl.searchParams;
   const ZERO_EX_API_KEY = process.env.ZERO_EX_API_KEY;
@@ -18,13 +21,19 @@ export async function GET(request: NextRequest) {
   const params = new URLSearchParams();
   
   // Copy original params
-  originalParams.forEach((value, key) => {
+  originalParams.forEach((value: string, key: string) => {
     params.set(key, value);
   });
   
   // Enable price impact calculation - set to 0.99 (99%) to get estimatedPriceImpact without blocking quotes
   // This is how Matcha gets price impact data
   params.set("priceImpactProtectionPercentage", "0.99");
+  
+  // Set slippage - use provided value or default to 1%
+  // This ensures the swap data's internal minimum matches what we expect
+  if (!params.has("slippageBps")) {
+    params.set("slippageBps", DEFAULT_SLIPPAGE_BPS);
+  }
   
   // Add fee parameters (only if recipient is set and fees enabled)
   // swapFeeToken must be the actual token address, not "buyToken" string
