@@ -1399,7 +1399,8 @@ export default function TokenSweeperPage() {
           address: config.swapper,
           abi: SWAPPER_ABI,
           functionName: 'executePlanFromCaller',
-          args: [[swap] as const, recipient],
+          // @ts-ignore viem strict typing doesn't match our SwapStep interface
+          args: [[swap], recipient],
           account: recipient,
         });
         
@@ -1492,6 +1493,7 @@ export default function TokenSweeperPage() {
           address: config.swapper,
           abi: SWAPPER_ABI,
           functionName: 'executePlanFromCaller',
+          // @ts-ignore viem strict typing doesn't match our SwapStep interface
           args: [remainingPlan, recipient],
           account: recipient,
         });
@@ -1516,6 +1518,7 @@ export default function TokenSweeperPage() {
               address: config.swapper,
               abi: SWAPPER_ABI,
               functionName: 'executePlanFromCaller',
+              // @ts-ignore viem strict typing doesn't match our SwapStep interface
               args: [testPlan, recipient],
               account: recipient,
             });
@@ -1571,7 +1574,8 @@ export default function TokenSweeperPage() {
             address: config.swapper,
             abi: SWAPPER_ABI,
             functionName: 'executePlanFromCaller',
-            args: [[modifiedSwap] as const, recipient],
+            // @ts-ignore viem strict typing doesn't match our SwapStep interface
+            args: [[modifiedSwap], recipient],
             account: recipient,
           });
           gas = (gas * 150n) / 100n; // 50% buffer
@@ -1584,7 +1588,8 @@ export default function TokenSweeperPage() {
           address: config.swapper,
           abi: SWAPPER_ABI,
           functionName: 'executePlanFromCaller',
-          args: [[modifiedSwap] as const, recipient],
+          // @ts-ignore viem strict typing doesn't match our SwapStep interface
+          args: [[modifiedSwap], recipient],
           gas
         });
         
@@ -2153,6 +2158,7 @@ export default function TokenSweeperPage() {
             address: config.swapper,
             abi: SWAPPER_ABI,
             functionName: 'executePlanFromCaller',
+            // @ts-ignore viem strict typing doesn't match our SwapStep interface
             args: [passing, address],
             account: address,
           });
@@ -2198,6 +2204,7 @@ export default function TokenSweeperPage() {
               address: config.swapper,
               abi: SWAPPER_ABI,
               functionName: 'executePlanFromCaller',
+              // @ts-ignore viem strict typing doesn't match our SwapStep interface
               args: [planToExecute, address],
               account: address,
             });
@@ -2206,6 +2213,7 @@ export default function TokenSweeperPage() {
               address: config.swapper,
               abi: SWAPPER_ABI,
               functionName: 'executePlanFromCaller',
+              // @ts-ignore viem strict typing doesn't match our SwapStep interface
               args: [planToExecute, address],
               gas: (gas * 130n) / 100n
             });
