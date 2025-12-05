@@ -813,6 +813,7 @@ export default function TokenSweeperPage() {
   const [detailedResults, setDetailedResults] = useState<SwapResultDetail[]>([]);
   const [showResultsModal, setShowResultsModal] = useState(false);
   const [showUnknownPriceTokens, setShowUnknownPriceTokens] = useState(false);
+  const [lastScannedKey, setLastScannedKey] = useState<string | null>(null);  
 
   const config = CHAIN_CONFIG[chainId] || CHAIN_CONFIG[8453];
   const supportedChain = !!CHAIN_CONFIG[chainId];
@@ -1154,19 +1155,42 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
     }
   }, [address, publicClient, chainId, supportedChain, config, manualTokens]);
 
+  // Reset scan state when wallet or chain changes
   useEffect(() => {
-    setHasScanned(false);
-  }, [address, chainId]);
+    const currentKey = address && chainId ? `${address}-${chainId}` : null;
+    
+    // If wallet/chain combo changed, reset everything
+    if (currentKey !== lastScannedKey) {
+      setTokens([]);
+      setSelectedTokens(new Set());
+      setCustomAmounts({});
+      setHasScanned(false);
+      console.log(`🔄 Wallet/chain changed: ${currentKey}`);
+    }
+  }, [address, chainId, lastScannedKey]);
 
+  // Auto-scan new wallet/chain combos
   useEffect(() => {
-    if (address && supportedChain && !isScanning && !hasScanned && tokens.length === 0 && manualTokensLoaded) {
+    const currentKey = address && chainId ? `${address}-${chainId}` : null;
+    
+    if (
+      address && 
+      supportedChain && 
+      !isScanning && 
+      !hasScanned && 
+      tokens.length === 0 && 
+      manualTokensLoaded &&
+      currentKey !== lastScannedKey
+    ) {
       const timer = setTimeout(() => {
-        console.log('🔄 Auto-scanning new wallet...');
+        console.log(`🔄 Auto-scanning ${address.slice(0, 8)}... on chain ${chainId}...`);
+        setLastScannedKey(currentKey);
         scanWalletTokens();
-      }, 500);
+      }, 800);
+      
       return () => clearTimeout(timer);
     }
-  }, [address, supportedChain, scanWalletTokens, isScanning, hasScanned, tokens.length, manualTokensLoaded]);
+  }, [address, chainId, supportedChain, scanWalletTokens, isScanning, hasScanned, tokens.length, manualTokensLoaded, lastScannedKey]);
 
   async function fetchTokenList(chainId: number, wallet: string): Promise<Address[]> {
     try {
