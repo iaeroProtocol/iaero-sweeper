@@ -27,10 +27,12 @@ import {
   Search,
   Settings,
   ChevronDown,
+  ChevronRight,
   ExternalLink,
   Zap,
   X,
-  XCircle
+  XCircle,
+  HelpCircle
 } from 'lucide-react';
 
 // ============================================================================
@@ -72,7 +74,7 @@ const CHAIN_CONFIG: Record<number, ChainConfig> = {
   42161: { // Arbitrum
     name: 'Arbitrum',
     swapper: '0x75f57Faf06f0191a1422a665BFc297bcb6Aa765a',
-    usdc: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', // Native USDC
+    usdc: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
     usdcDecimals: 6,
     weth: '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1',
     allowanceHolder: '0x0000000000001fF3684f28c67538d4D072C22734',
@@ -82,59 +84,59 @@ const CHAIN_CONFIG: Record<number, ChainConfig> = {
   10: { // Optimism
     name: 'Optimism',
     swapper: '0x75f57Faf06f0191a1422a665BFc297bcb6Aa765a',
-    usdc: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', // Native USDC
+    usdc: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85',
     usdcDecimals: 6,
     weth: '0x4200000000000000000000000000000000000006',
     allowanceHolder: '0x0000000000001fF3684f28c67538d4D072C22734',
     explorerUrl: 'https://optimistic.etherscan.io',
     coingeckoId: 'optimistic-ethereum',
   },
-  137: { // Polygon - DEPLOYED
+  137: { // Polygon
     name: 'Polygon',
     swapper: '0x75f57Faf06f0191a1422a665BFc297bcb6Aa765a',
-    usdc: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359', // Native USDC
+    usdc: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359',
     usdcDecimals: 6,
-    weth: '0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619', // Bridged WETH
+    weth: '0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619',
     allowanceHolder: '0x0000000000001fF3684f28c67538d4D072C22734',
     explorerUrl: 'https://polygonscan.com',
     coingeckoId: 'polygon-pos',
   },
-  56: { // BNB Chain - DEPLOYED
+  56: { // BNB Chain
     name: 'BNB Chain',
     swapper: '0x75f57Faf06f0191a1422a665BFc297bcb6Aa765a',
-    usdc: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', // USDC (18 decimals on BSC!)
+    usdc: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d',
     usdcDecimals: 18,
-    weth: '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c', // WBNB
+    weth: '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c',
     allowanceHolder: '0x0000000000001fF3684f28c67538d4D072C22734',
     explorerUrl: 'https://bscscan.com',
     coingeckoId: 'binance-smart-chain',
   },
-  43114: { // Avalanche - DEPLOYED
+  43114: { // Avalanche
     name: 'Avalanche',
     swapper: '0x75f57Faf06f0191a1422a665BFc297bcb6Aa765a',
-    usdc: '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E', // Native USDC
+    usdc: '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E',
     usdcDecimals: 6,
-    weth: '0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7', // WAVAX
+    weth: '0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7',
     allowanceHolder: '0x0000000000001fF3684f28c67538d4D072C22734',
     explorerUrl: 'https://snowtrace.io',
     coingeckoId: 'avalanche',
   },
-  534352: { // Scroll - DEPLOYED
+  534352: { // Scroll
     name: 'Scroll',
     swapper: '0x75f57Faf06f0191a1422a665BFc297bcb6Aa765a',
-    usdc: '0x06eFdBFf2a14a7c8E15944D1F4A48F9F95F663A4', // USDC
+    usdc: '0x06eFdBFf2a14a7c8E15944D1F4A48F9F95F663A4',
     usdcDecimals: 6,
-    weth: '0x5300000000000000000000000000000000000004', // WETH
+    weth: '0x5300000000000000000000000000000000000004',
     allowanceHolder: '0x0000000000001fF3684f28c67538d4D072C22734',
     explorerUrl: 'https://scrollscan.com',
     coingeckoId: 'scroll',
   },
-  59144: { // Linea - DEPLOYED (different address due to nonce)
+  59144: { // Linea
     name: 'Linea',
     swapper: '0x679e6e600E480d99f8aeD8555953AD2cF43bAB96',
-    usdc: '0x176211869cA2b568f2A7D4EE941E073a821EE1ff', // USDC
+    usdc: '0x176211869cA2b568f2A7D4EE941E073a821EE1ff',
     usdcDecimals: 6,
-    weth: '0xe5D7C2a44FfDDf6b295A15c148167daaAf5Cf34f', // WETH
+    weth: '0xe5D7C2a44FfDDf6b295A15c148167daaAf5Cf34f',
     allowanceHolder: '0x0000000000001fF3684f28c67538d4D072C22734',
     explorerUrl: 'https://lineascan.build',
     coingeckoId: 'linea',
@@ -224,7 +226,6 @@ const ERC20_ABI = [
   }
 ] as const;
 
-// Router kind for aggregator swaps
 const RouterKind = {
   AGGREGATOR: 2
 } as const;
@@ -243,6 +244,7 @@ interface TokenInfo {
   price: number;
   valueUsd: number;
   logoUrl?: string;
+  priceSource?: 'zerox' | 'defillama' | 'coingecko' | 'stablecoin' | 'unknown';
 }
 
 interface TokenWithAmount extends TokenInfo {
@@ -280,22 +282,21 @@ interface SwapResultDetail {
   tokenIn: Address;
   amountIn: bigint;
   decimalsIn: number;
-  inputValueUsd: number;        // DefiLlama valuation of input
-  quotedOutputUsd: number;      // 0x quoted output value
-  actualOutputUsd?: number;     // What was actually received
-  executionSlippage: number;    // (quoted - actual) / quoted - TRUE efficiency
-  totalCostPercent: number;     // (input - actual) / input - includes all fees/spreads
+  inputValueUsd: number;
+  quotedOutputUsd: number;
+  actualOutputUsd?: number;
+  executionSlippage: number;
+  totalCostPercent: number;
   status: 'success' | 'failed' | 'skipped';
   error?: string;
 }
 
-// Raw token info before pricing (for caching)
 interface RawTokenInfo {
   address: Address;
   symbol: string;
   name: string;
   decimals: number;
-  balance: string; // Stored as string for JSON serialization
+  balance: string;
   logoUrl?: string;
 }
 
@@ -303,12 +304,9 @@ interface RawTokenInfo {
 // CACHING SYSTEM
 // ============================================================================
 
-// Cache TTLs
-const PRICE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-const FAILED_TOKEN_TTL = 24 * 60 * 60 * 1000; // 24 hours
-const EXTERNAL_SPAM_LIST_TTL = 24 * 60 * 60 * 1000; // 24 hours
+const PRICE_CACHE_TTL = 5 * 60 * 1000;
+const EXTERNAL_SPAM_LIST_TTL = 24 * 60 * 60 * 1000;
 
-// External spam list URLs (raw GitHub)
 const EXTERNAL_SPAM_LISTS: Record<number, string> = {
   8453: 'https://raw.githubusercontent.com/iaeroProtocol/ChainProcessingBot/main/data/spam_tokens_base.json',
   1: 'https://raw.githubusercontent.com/iaeroProtocol/ChainProcessingBot/main/data/spam_tokens_ethereum.json',
@@ -321,153 +319,122 @@ const EXTERNAL_SPAM_LISTS: Record<number, string> = {
   59144: 'https://raw.githubusercontent.com/iaeroProtocol/ChainProcessingBot/main/data/spam_tokens_linea.json',
 };
 
-// KNOWN GOOD TOKENS - These will NEVER be filtered as spam
-// Popular DeFi tokens that might temporarily fail price discovery
 const KNOWN_GOOD_TOKENS: Record<number, Set<string>> = {
-  1: new Set([ // Ethereum Mainnet
-    '0xd533a949740bb3306d119cc777fa900ba034cd52', // CRV
-    '0x808507121b80c02388fad14726482e061b8da827', // PENDLE
-    '0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9', // AAVE
-    '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984', // UNI
-    '0xc00e94cb662c3520282e6f5717214004a7f26888', // COMP
-    '0x9f8f72aa9304c8b593d555f12ef6589cc3a579a2', // MKR
-    '0x6b3595068778dd592e39a122f4f5a5cf09c90fe2', // SUSHI
-    '0x0bc529c00c6401aef6d220be8c6ea1667f6ad93e', // YFI
-    '0xc011a73ee8576fb46f5e1c5751ca3b9fe0af2a6f', // SNX
-    '0x4e3fbd56cd56c3e72c1403e103b45db9da5b9d2b', // CVX
-    '0x5a98fcbea516cf06857215779fd812ca3bef1b32', // LDO
-    '0xba100000625a3754423978a60c9317c58a424e3d', // BAL
-    '0x111111111117dc0aa78b770fa6a738034120c302', // 1INCH
-    '0x7d1afa7b718fb893db30a3abc0cfc608aacfebb0', // MATIC
-    '0x514910771af9ca656af840dff83e8264ecf986ca', // LINK
-    '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599', // WBTC
-    '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2', // WETH
-    '0xae78736cd615f374d3085123a210448e74fc6393', // rETH
-    '0xbe9895146f7af43049ca1c1ae358b0541ea49704', // cbETH
-    '0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0', // wstETH
-    '0xae7ab96520de3a18e5e111b5eaab095312d7fe84', // stETH
-    '0x6982508145454ce325ddbe47a25d4ec3d2311933', // PEPE
-    '0x95ad61b0a150d79219dcf64e1e6cc01f0b64c4ce', // SHIB
-    '0xf57e7e7c23978c3caec3c3548e3d615c346e79ff', // IMX
+  1: new Set([
+    '0xd533a949740bb3306d119cc777fa900ba034cd52',
+    '0x808507121b80c02388fad14726482e061b8da827',
+    '0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9',
+    '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984',
+    '0xc00e94cb662c3520282e6f5717214004a7f26888',
+    '0x9f8f72aa9304c8b593d555f12ef6589cc3a579a2',
+    '0x6b3595068778dd592e39a122f4f5a5cf09c90fe2',
+    '0x0bc529c00c6401aef6d220be8c6ea1667f6ad93e',
+    '0xc011a73ee8576fb46f5e1c5751ca3b9fe0af2a6f',
+    '0x4e3fbd56cd56c3e72c1403e103b45db9da5b9d2b',
+    '0x5a98fcbea516cf06857215779fd812ca3bef1b32',
+    '0xba100000625a3754423978a60c9317c58a424e3d',
+    '0x111111111117dc0aa78b770fa6a738034120c302',
+    '0x7d1afa7b718fb893db30a3abc0cfc608aacfebb0',
+    '0x514910771af9ca656af840dff83e8264ecf986ca',
+    '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599',
+    '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2',
+    '0xae78736cd615f374d3085123a210448e74fc6393',
+    '0xbe9895146f7af43049ca1c1ae358b0541ea49704',
+    '0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0',
+    '0xae7ab96520de3a18e5e111b5eaab095312d7fe84',
+    '0x6982508145454ce325ddbe47a25d4ec3d2311933',
+    '0x95ad61b0a150d79219dcf64e1e6cc01f0b64c4ce',
+    '0xf57e7e7c23978c3caec3c3548e3d615c346e79ff',
   ].map(a => a.toLowerCase())),
-  8453: new Set([ // Base
-    '0x940181a94a35a4569e4529a3cdfb74e38fd98631', // AERO
-    '0x2ae3f1ec7f1f5012cfeab0185bfc7aa3cf0dec22', // cbETH
-    '0xc1cba3fcea344f92d9239c08c0568f6f2f0ee452', // wstETH
-    '0xb6fe221fe9eef5aba221c348ba20a1bf5e73624c', // rETH
-    '0x4200000000000000000000000000000000000006', // WETH
+  8453: new Set([
+    '0x940181a94a35a4569e4529a3cdfb74e38fd98631',
+    '0x2ae3f1ec7f1f5012cfeab0185bfc7aa3cf0dec22',
+    '0xc1cba3fcea344f92d9239c08c0568f6f2f0ee452',
+    '0xb6fe221fe9eef5aba221c348ba20a1bf5e73624c',
+    '0x4200000000000000000000000000000000000006',
   ].map(a => a.toLowerCase())),
-  42161: new Set([ // Arbitrum
-    '0x912ce59144191c1204e64559fe8253a0e49e6548', // ARB
-    '0x11cdb42b0eb46d95f990bedd4695a6e3fa034978', // CRV
-    '0x0c880f6761f1af8d9aa9c466984b80dab9a8c9e8', // PENDLE
-    '0xfc5a1a6eb076a2c7ad06ed22c90d7e710e35ad0a', // GMX
-    '0x539bde0d7dbd336b79148aa742883198bbf60342', // MAGIC
-    '0x82af49447d8a07e3bd95bd0d56f35241523fbab1', // WETH
-    '0x5979d7b546e38e414f7e9822514be443a4800529', // wstETH
+  42161: new Set([
+    '0x912ce59144191c1204e64559fe8253a0e49e6548',
+    '0x11cdb42b0eb46d95f990bedd4695a6e3fa034978',
+    '0x0c880f6761f1af8d9aa9c466984b80dab9a8c9e8',
+    '0xfc5a1a6eb076a2c7ad06ed22c90d7e710e35ad0a',
+    '0x539bde0d7dbd336b79148aa742883198bbf60342',
+    '0x82af49447d8a07e3bd95bd0d56f35241523fbab1',
+    '0x5979d7b546e38e414f7e9822514be443a4800529',
   ].map(a => a.toLowerCase())),
-  10: new Set([ // Optimism
-    '0x4200000000000000000000000000000000000042', // OP
-    '0x0994206dfe8de6ec6920ff4d779b0d950605fb53', // CRV
-    '0x9560e827af36c94d2ac33a39bce1fe78631088db', // VELO
-    '0x4200000000000000000000000000000000000006', // WETH
-    '0x1f32b1c2345538c0c6f582fcb022739c4a194ebb', // wstETH
+  10: new Set([
+    '0x4200000000000000000000000000000000000042',
+    '0x0994206dfe8de6ec6920ff4d779b0d950605fb53',
+    '0x9560e827af36c94d2ac33a39bce1fe78631088db',
+    '0x4200000000000000000000000000000000000006',
+    '0x1f32b1c2345538c0c6f582fcb022739c4a194ebb',
   ].map(a => a.toLowerCase())),
-  137: new Set([ // Polygon
-    '0x172370d5cd63279efa6d502dab29171933a610af', // CRV
-    '0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270', // WMATIC
-    '0x7ceb23fd6bc0add59e62ac25578270cff1b9f619', // WETH
-    '0x53e0bca35ec356bd5dddfebbd1fc0fd03fabad39', // LINK
+  137: new Set([
+    '0x172370d5cd63279efa6d502dab29171933a610af',
+    '0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270',
+    '0x7ceb23fd6bc0add59e62ac25578270cff1b9f619',
+    '0x53e0bca35ec356bd5dddfebbd1fc0fd03fabad39',
   ].map(a => a.toLowerCase())),
-  56: new Set([ // BNB Chain
-    '0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c', // WBNB
-    '0x2170ed0880ac9a755fd29b2688956bd959f933f8', // ETH
-    '0x0e09fabb73bd3ade0a17ecc321fd13a19e81ce82', // CAKE
+  56: new Set([
+    '0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c',
+    '0x2170ed0880ac9a755fd29b2688956bd959f933f8',
+    '0x0e09fabb73bd3ade0a17ecc321fd13a19e81ce82',
   ].map(a => a.toLowerCase())),
-  43114: new Set([ // Avalanche
-    '0xb31f66aa3c1e785363f0875a1b74e27b85fd66c7', // WAVAX
-    '0x49d5c2bdffac6ce2bfdb6640f4f80f226bc10bab', // WETH.e
-    '0x152b9d0fdc40c096757f570a51e494bd4b943e50', // BTC.b
+  43114: new Set([
+    '0xb31f66aa3c1e785363f0875a1b74e27b85fd66c7',
+    '0x49d5c2bdffac6ce2bfdb6640f4f80f226bc10bab',
+    '0x152b9d0fdc40c096757f570a51e494bd4b943e50',
   ].map(a => a.toLowerCase())),
 };
 
-// Helper to check if token is whitelisted
 function isKnownGoodToken(chainId: number, address: string): boolean {
   const whitelist = KNOWN_GOOD_TOKENS[chainId];
   return whitelist ? whitelist.has(address.toLowerCase()) : false;
 }
 
-// KNOWN GOOD SYMBOLS - These tokens will NEVER be marked as spam regardless of chain
-// Includes popular DeFi tokens, LSTs, governance tokens, etc.
 const KNOWN_GOOD_SYMBOLS = new Set([
-  // Major DeFi governance tokens
   'CRV', 'CVX', 'AAVE', 'UNI', 'SUSHI', 'COMP', 'MKR', 'YFI', 'BAL', '1INCH', 'SNX', 'LDO',
-  // Pendle ecosystem
   'PENDLE',
-  // Liquid staking
   'STETH', 'WSTETH', 'RETH', 'CBETH', 'SFRXETH', 'FRXETH', 'ANKRETH', 'SWETH', 'ETHX',
   'METH', 'EETH', 'WEETH', 'RSETH', 'EZETH', 'PUFETH',
-  // Major L1/L2 tokens
   'WETH', 'WBTC', 'WMATIC', 'WAVAX', 'WBNB', 'ARB', 'OP', 'MATIC', 'AVAX', 'ETH', 'BTC',
-  // Stablecoins
   'USDC', 'USDT', 'DAI', 'FRAX', 'LUSD', 'SUSD', 'BUSD', 'TUSD', 'USDP', 'GHO', 'CRVUSD', 'PYUSD',
   'USDE', 'SUSDE', 'ENA', 'SENA',
-  // Popular tokens
   'LINK', 'GRT', 'ENS', 'APE', 'SHIB', 'PEPE', 'DOGE', 'IMX', 'BLUR', 'RNDR', 'FET', 'OCEAN',
-  // DEX tokens
   'AERO', 'VELO', 'GMX', 'JOE', 'CAKE', 'QUICK', 'MAGIC',
-  // Restaking
   'EIGEN', 'PZETH',
-  // Morpho
   'MORPHO',
-  // Real yield
   'GLP', 'SGLP',
 ]);
 
-// Check if a symbol matches known good patterns
 function isKnownGoodSymbol(symbol: string): boolean {
   if (!symbol) return false;
   const upper = symbol.toUpperCase();
-  
-  // Direct match
   if (KNOWN_GOOD_SYMBOLS.has(upper)) return true;
-  
-  // Pendle tokens (PT-xxx, YT-xxx, SY-xxx) - ALWAYS protected
   if (upper.startsWith('PT-') || upper.startsWith('YT-') || upper.startsWith('SY-')) return true;
-  
-  // Curve LP tokens often contain CRV
   if (upper.includes('CRV') || upper.includes('CURVE')) return true;
-  
-  // Convex tokens
   if (upper.startsWith('CVX')) return true;
-  
-  // Aave tokens (aTokens)
-  if (upper.match(/^A[A-Z]+V[23]?$/)) return true; // aUSDCV3, aWETHV2, etc.
-  
-  // Compound tokens (cTokens)
-  if (upper.match(/^C[A-Z]+$/)) return true; // cUSDC, cETH, etc.
-  
+  if (upper.match(/^A[A-Z]+V[23]?$/)) return true;
+  if (upper.match(/^C[A-Z]+$/)) return true;
   return false;
 }
 
-// Combined check: address OR symbol
 function isProtectedToken(chainId: number, address: string, symbol: string): boolean {
   return isKnownGoodToken(chainId, address) || isKnownGoodSymbol(symbol);
 }
 
-// In-memory cache for external spam lists (avoids refetching within session)
-const externalSpamCache: Map<number, { addresses: Set<string>; timestamp: number }> = new Map();
+const externalSpamCache: Map<number, { addresses: Set<string>; patterns: string[]; timestamp: number }> = new Map();
 
-// Fetch external spam list from GitHub (with localStorage caching)
-async function fetchExternalSpamList(chainId: number): Promise<Set<string>> {
+// FIXED: Returns Set<string> consistently
+async function fetchExternalSpamList(chainId: number): Promise<{ addresses: Set<string>; patterns: string[] }> {
   const url = EXTERNAL_SPAM_LISTS[chainId];
-  if (!url) return new Set();
+  if (!url) return { addresses: new Set(), patterns: [] };
   
   // Check in-memory cache first
   const memCached = externalSpamCache.get(chainId);
   if (memCached && Date.now() - memCached.timestamp < EXTERNAL_SPAM_LIST_TTL) {
     console.log(`📋 Using in-memory spam list for chain ${chainId}: ${memCached.addresses.size} addresses`);
-    return memCached.addresses;
+    return { addresses: memCached.addresses, patterns: memCached.patterns };
   }
   
   // Check localStorage cache
@@ -479,9 +446,10 @@ async function fetchExternalSpamList(chainId: number): Promise<Set<string>> {
         const data = JSON.parse(cached);
         if (Date.now() - data.timestamp < EXTERNAL_SPAM_LIST_TTL) {
           const addresses = new Set<string>(data.addresses);
-          externalSpamCache.set(chainId, { addresses, timestamp: data.timestamp });
+          const patterns = data.patterns || [];
+          externalSpamCache.set(chainId, { addresses, patterns, timestamp: data.timestamp });
           console.log(`📋 Using localStorage spam list for chain ${chainId}: ${addresses.size} addresses`);
-          return addresses;
+          return { addresses, patterns };
         }
       }
     } catch (e) {
@@ -495,28 +463,21 @@ async function fetchExternalSpamList(chainId: number): Promise<Set<string>> {
     const res = await fetch(url, { cache: 'no-cache' });
     if (!res.ok) {
       console.warn(`Failed to fetch spam list: ${res.status}`);
-      return new Set();
+      return { addresses: new Set(), patterns: [] };
     }
     
     const data = await res.json();
     
-    // Support multiple formats:
-    // 1. Array of addresses: ["0x...", "0x..."]
-    // 2. Object with tokens array: { tokens: [{ address: "0x..." }, ...] }
-    // 3. Object with address keys: { "0x...": true }
     let addresses: string[] = [];
     let patterns: string[] = [];
     
     if (Array.isArray(data)) {
-      // Simple array format
       addresses = data.map(a => String(a).toLowerCase());
     } else if (typeof data === 'object' && data !== null) {
-      // Check for tokens array (iaeroProtocol format)
       if (data.tokens && Array.isArray(data.tokens)) {
         addresses = data.tokens
           .filter((t: any) => t)
           .map((t: any) => {
-            // Handle both { address: "0x..." } and plain "0x..." formats
             if (typeof t === 'string') return t.toLowerCase();
             if (t.address) return String(t.address).toLowerCase();
             return null;
@@ -524,12 +485,10 @@ async function fetchExternalSpamList(chainId: number): Promise<Set<string>> {
           .filter((a: string | null) => a !== null);
         console.log(`  📋 Parsed ${addresses.length} addresses from tokens array`);
       } 
-      // Check for symbolPatterns (for heuristic filtering)
       if (data.symbolPatterns && Array.isArray(data.symbolPatterns)) {
         patterns = data.symbolPatterns.map((p: string) => p.toLowerCase());
         console.log(`  🔍 Loaded ${patterns.length} symbol patterns for heuristic detection`);
       }
-      // Fallback: object with address keys
       if (addresses.length === 0 && !data.tokens) {
         addresses = Object.keys(data)
           .filter(k => k.startsWith('0x'))
@@ -540,8 +499,8 @@ async function fetchExternalSpamList(chainId: number): Promise<Set<string>> {
     const addressSet = new Set(addresses);
     console.log(`✅ Loaded ${addressSet.size} spam addresses for chain ${chainId}`);
     
-    // Cache in memory (include patterns for future use)
-    externalSpamCache.set(chainId, { addresses: addressSet, timestamp: Date.now() });
+    // Cache in memory (include patterns)
+    externalSpamCache.set(chainId, { addresses: addressSet, patterns, timestamp: Date.now() });
     
     // Also cache symbol patterns if present
     if (patterns.length > 0 && typeof window !== 'undefined') {
@@ -552,12 +511,13 @@ async function fetchExternalSpamList(chainId: number): Promise<Set<string>> {
       }
     }
     
-    // Cache in localStorage
+    // Cache in localStorage (include patterns)
     if (typeof window !== 'undefined') {
       try {
         const key = `sweeper_external_spam_${chainId}`;
         localStorage.setItem(key, JSON.stringify({
           addresses: Array.from(addressSet),
+          patterns,
           timestamp: Date.now()
         }));
       } catch (e) {
@@ -565,19 +525,18 @@ async function fetchExternalSpamList(chainId: number): Promise<Set<string>> {
       }
     }
     
-    return addressSet;
+    return { addresses: addressSet, patterns };
   } catch (e) {
     console.warn('Failed to fetch external spam list:', e);
-    return new Set();
+    return { addresses: new Set(), patterns: [] };
   }
 }
 
-// Price cache (localStorage with 5 min TTL)
 function getPriceCacheKey(chainId: number): string {
   return `sweeper_prices_${chainId}`;
 }
 
-function getCachedPrices(chainId: number): Record<string, { price: number; timestamp: number }> {
+function getCachedPrices(chainId: number): Record<string, { price: number; source: string; timestamp: number }> {
   if (typeof window === 'undefined') return {};
   try {
     const key = getPriceCacheKey(chainId);
@@ -591,21 +550,21 @@ function getCachedPrices(chainId: number): Record<string, { price: number; times
   return {};
 }
 
-function getCachedPrice(chainId: number, tokenAddress: string): number | null {
+function getCachedPrice(chainId: number, tokenAddress: string): { price: number; source: string } | null {
   const allPrices = getCachedPrices(chainId);
   const entry = allPrices[tokenAddress.toLowerCase()];
   if (entry && Date.now() - entry.timestamp < PRICE_CACHE_TTL) {
-    return entry.price;
+    return { price: entry.price, source: entry.source };
   }
   return null;
 }
 
-function setCachedPrice(chainId: number, tokenAddress: string, price: number): void {
+function setCachedPrice(chainId: number, tokenAddress: string, price: number, source: string): void {
   if (typeof window === 'undefined') return;
   try {
     const key = getPriceCacheKey(chainId);
     const allPrices = getCachedPrices(chainId);
-    allPrices[tokenAddress.toLowerCase()] = { price, timestamp: Date.now() };
+    allPrices[tokenAddress.toLowerCase()] = { price, source, timestamp: Date.now() };
     localStorage.setItem(key, JSON.stringify(allPrices));
   } catch (e) {
     console.warn('Failed to write price cache:', e);
@@ -623,7 +582,6 @@ function clearPriceCache(chainId: number): void {
   }
 }
 
-// Token cache (localStorage)
 function getTokenCacheKey(address: string, chainId: number): string {
   return `sweeper_tokens_${address.toLowerCase()}_${chainId}`;
 }
@@ -635,7 +593,6 @@ function getCachedTokens(address: string, chainId: number): RawTokenInfo[] | nul
     const cached = localStorage.getItem(key);
     if (cached) {
       const data = JSON.parse(cached);
-      // No TTL for tokens - valid until swap or manual refresh
       return data.tokens;
     }
   } catch (e) {
@@ -665,126 +622,45 @@ function clearTokenCache(address: string, chainId: number): void {
   }
 }
 
-// Failed token cache (localStorage) - tracks tokens that returned no quote (runtime spam detection)
-function getFailedTokensCacheKey(chainId: number): string {
-  return `sweeper_failed_${chainId}`;
+function getUserHiddenTokensKey(chainId: number): string {
+  return `sweeper_user_hidden_${chainId}`;
 }
 
-function getFailedTokens(chainId: number): Set<string> {
+function getUserHiddenTokens(chainId: number): Set<string> {
   if (typeof window === 'undefined') return new Set();
   try {
-    const key = getFailedTokensCacheKey(chainId);
-    const cached = localStorage.getItem(key);
+    const cached = localStorage.getItem(getUserHiddenTokensKey(chainId));
     if (cached) {
-      const data = JSON.parse(cached);
-      const now = Date.now();
-      // Filter out expired entries
-      const valid: Record<string, number> = {};
-      for (const [addr, ts] of Object.entries(data)) {
-        if (now - (ts as number) < FAILED_TOKEN_TTL) {
-          valid[addr] = ts as number;
-        }
-      }
-      // Update cache if we removed expired entries
-      if (Object.keys(valid).length !== Object.keys(data).length) {
-        localStorage.setItem(key, JSON.stringify(valid));
-      }
-      return new Set(Object.keys(valid));
+      return new Set(JSON.parse(cached));
     }
   } catch (e) {
-    console.warn('Failed to read failed tokens cache:', e);
+    console.warn('Failed to read user hidden tokens:', e);
   }
   return new Set();
 }
 
-function markTokenAsFailed(chainId: number, tokenAddress: string): void {
+function hideToken(chainId: number, tokenAddress: string): void {
   if (typeof window === 'undefined') return;
   try {
-    const key = getFailedTokensCacheKey(chainId);
-    const cached = localStorage.getItem(key);
-    const data = cached ? JSON.parse(cached) : {};
-    data[tokenAddress.toLowerCase()] = Date.now();
-    localStorage.setItem(key, JSON.stringify(data));
-    console.log(`🚫 Marked ${tokenAddress.slice(0, 10)}... as failed/spam`);
+    const hidden = getUserHiddenTokens(chainId);
+    hidden.add(tokenAddress.toLowerCase());
+    localStorage.setItem(getUserHiddenTokensKey(chainId), JSON.stringify(Array.from(hidden)));
+    console.log(`🚫 User hid token: ${tokenAddress.slice(0, 10)}...`);
   } catch (e) {
-    console.warn('Failed to write failed token cache:', e);
+    console.warn('Failed to hide token:', e);
   }
 }
 
-function clearFailedTokensCache(chainId: number): void {
+function clearUserHiddenTokens(chainId: number): void {
   if (typeof window === 'undefined') return;
   try {
-    // Clear the spam list
-    const key = getFailedTokensCacheKey(chainId);
-    localStorage.removeItem(key);
-    console.log('🗑️ Cleared failed tokens cache');
-    
-    // ALSO clear the price failure counts - this is critical!
-    // Otherwise tokens will hit the threshold immediately on next scan
-    const priceFailKey = `sweeper_price_failures_${chainId}`;
-    localStorage.removeItem(priceFailKey);
-    console.log('🗑️ Cleared price failure counts');
+    localStorage.removeItem(getUserHiddenTokensKey(chainId));
+    console.log('🗑️ Cleared user hidden tokens');
   } catch (e) {
-    console.warn('Failed to clear failed tokens cache:', e);
+    console.warn('Failed to clear user hidden tokens:', e);
   }
 }
 
-// Track tokens that fail to get prices (no liquidity)
-// After PRICE_FAIL_THRESHOLD consecutive failures, auto-mark as spam
-const PRICE_FAIL_THRESHOLD = 5; // Increased from 2 - legitimate tokens can have temporary failures
-
-function getPriceFailureCacheKey(chainId: number): string {
-  return `sweeper_price_failures_${chainId}`;
-}
-
-function getPriceFailures(chainId: number): Record<string, number> {
-  if (typeof window === 'undefined') return {};
-  try {
-    const cached = localStorage.getItem(getPriceFailureCacheKey(chainId));
-    return cached ? JSON.parse(cached) : {};
-  } catch (e) {
-    return {};
-  }
-}
-
-function incrementPriceFailure(chainId: number, tokenAddress: string): number {
-  if (typeof window === 'undefined') return 0;
-  try {
-    const key = getPriceFailureCacheKey(chainId);
-    const failures = getPriceFailures(chainId);
-    const addr = tokenAddress.toLowerCase();
-    failures[addr] = (failures[addr] || 0) + 1;
-    localStorage.setItem(key, JSON.stringify(failures));
-    return failures[addr];
-  } catch (e) {
-    return 0;
-  }
-}
-
-function clearPriceFailure(chainId: number, tokenAddress: string): void {
-  if (typeof window === 'undefined') return;
-  try {
-    const key = getPriceFailureCacheKey(chainId);
-    const failures = getPriceFailures(chainId);
-    delete failures[tokenAddress.toLowerCase()];
-    localStorage.setItem(key, JSON.stringify(failures));
-  } catch (e) {
-    // ignore
-  }
-}
-
-// Get combined spam list (external + runtime failures)
-async function getAllSpamTokens(chainId: number): Promise<Set<string>> {
-  const externalSpam = await fetchExternalSpamList(chainId);
-  const runtimeSpam = getFailedTokens(chainId);
-  
-  // Combine both sets
-  const combined = new Set([...externalSpam, ...runtimeSpam]);
-  console.log(`🚫 Total spam tokens: ${combined.size} (${externalSpam.size} external + ${runtimeSpam.size} runtime)`);
-  return combined;
-}
-
-// Get spam symbol patterns for heuristic detection
 function getSpamPatterns(chainId: number): string[] {
   if (typeof window === 'undefined') return [];
   try {
@@ -798,22 +674,20 @@ function getSpamPatterns(chainId: number): string[] {
   return [];
 }
 
-// Check if a token symbol matches spam patterns
 function isSpamBySymbol(symbol: string, patterns: string[]): boolean {
   if (!symbol || patterns.length === 0) return false;
   const lowerSymbol = symbol.toLowerCase();
   return patterns.some(pattern => lowerSymbol.includes(pattern.toLowerCase()));
 }
 
-// Debug: Get cache stats
 function getCacheStats(chainId: number, walletAddress?: string): {
   externalSpam: number;
-  runtimeSpam: number;
+  userHidden: number;
   cachedPrices: number;
   cachedTokens: number;
 } {
   const externalCached = externalSpamCache.get(chainId);
-  const runtimeSpam = getFailedTokens(chainId);
+  const userHidden = getUserHiddenTokens(chainId);
   const prices = getCachedPrices(chainId);
   let tokenCount = 0;
   if (walletAddress) {
@@ -823,7 +697,7 @@ function getCacheStats(chainId: number, walletAddress?: string): {
   
   return {
     externalSpam: externalCached?.addresses.size || 0,
-    runtimeSpam: runtimeSpam.size,
+    userHidden: userHidden.size,
     cachedPrices: Object.keys(prices).length,
     cachedTokens: tokenCount
   };
@@ -831,13 +705,13 @@ function getCacheStats(chainId: number, walletAddress?: string): {
 
 interface QuotePreviewItem {
   token: TokenInfo & { amountToSwap: bigint };
-  inputValueUsd: number;      // From 0x if available, else DefiLlama
+  inputValueUsd: number;
   quotedOutputUsd: number;
   lossPercent: number;
   lossUsd: number;
   quote: SwapQuote;
   selected: boolean;
-  forceHighSlippage?: boolean; // Allow user to override slippage cap for high-impact swaps
+  forceHighSlippage?: boolean;
 }
 
 interface FailedQuoteItem {
@@ -880,27 +754,23 @@ function shortenAddress(address: string): string {
 // ============================================================================
 
 export default function TokenSweeperPage() {
-  // Wallet state
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const publicClient = usePublicClient();
   const { writeContractAsync } = useWriteContract();
   const { switchChain } = useSwitchChain();
 
-  // UI state
   const [isScanning, setIsScanning] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [progressStep, setProgressStep] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [hasScanned, setHasScanned] = useState(false); // Track if we've attempted scan (prevents loops)
+  const [hasScanned, setHasScanned] = useState(false);
   
-  // Manual token input
   const [manualTokenInput, setManualTokenInput] = useState('');
   const [manualTokens, setManualTokens] = useState<Set<string>>(new Set());
   const [manualTokensLoaded, setManualTokensLoaded] = useState(false);
   const [isAddingToken, setIsAddingToken] = useState(false);
   
-  // Load manual tokens from localStorage on mount/chain change
   useEffect(() => {
     if (typeof window !== 'undefined' && chainId) {
       const stored = localStorage.getItem(`manualTokens_${chainId}`);
@@ -919,26 +789,21 @@ export default function TokenSweeperPage() {
     }
   }, [chainId]);
   
-  // Save manual tokens to localStorage
   const saveManualTokens = useCallback((tokens: Set<string>) => {
     if (typeof window !== 'undefined' && chainId) {
       localStorage.setItem(`manualTokens_${chainId}`, JSON.stringify(Array.from(tokens)));
     }
   }, [chainId]);
   
-  // Token state
   const [tokens, setTokens] = useState<TokenInfo[]>([]);
   const [selectedTokens, setSelectedTokens] = useState<Set<string>>(new Set());
   const [customAmounts, setCustomAmounts] = useState<Record<string, string>>({});
   
-  // Output token
   const [outputToken, setOutputToken] = useState<'USDC' | 'WETH'>('USDC');
   
-  // Quote preview modal
   const [showQuotePreview, setShowQuotePreview] = useState(false);
   const [quotePreviewData, setQuotePreviewData] = useState<QuotePreviewData | null>(null);
   
-  // Transaction results
   const [txHash, setTxHash] = useState<string | null>(null);
   const [swapResults, setSwapResults] = useState<{
     success: number;
@@ -947,14 +812,12 @@ export default function TokenSweeperPage() {
   } | null>(null);
   const [detailedResults, setDetailedResults] = useState<SwapResultDetail[]>([]);
   const [showResultsModal, setShowResultsModal] = useState(false);
+  const [showUnknownPriceTokens, setShowUnknownPriceTokens] = useState(false);
 
-  // Chain config
   const config = CHAIN_CONFIG[chainId] || CHAIN_CONFIG[8453];
   const supportedChain = !!CHAIN_CONFIG[chainId];
 
-  // Clear tokens and rescan when wallet address or chain changes
   useEffect(() => {
-    // Clear all state when wallet changes
     setTokens([]);
     setSelectedTokens(new Set());
     setCustomAmounts({});
@@ -964,20 +827,17 @@ export default function TokenSweeperPage() {
     setError(null);
     setTxHash(null);
     
-    // Don't auto-scan if not connected or unsupported chain
     if (!address || !supportedChain) return;
     
     console.log(`🔄 Wallet changed to ${address.slice(0, 8)}... on chain ${chainId}`);
     
   }, [address, chainId, supportedChain]);
 
-  // Remove output token from selection when output token changes
   useEffect(() => {
     const outputTokenAddr = outputToken === 'USDC' ? config.usdc : config.weth;
     setSelectedTokens((prev: Set<string>) => {
       const newSet = new Set(prev);
       newSet.delete(outputTokenAddr);
-      // Also handle lowercase comparison
       for (const addr of prev) {
         if (addr.toLowerCase() === outputTokenAddr.toLowerCase()) {
           newSet.delete(addr);
@@ -999,7 +859,6 @@ export default function TokenSweeperPage() {
     setTokens([]);
     
     try {
-      // Check for cached tokens (unless force refresh)
       let rawTokens: RawTokenInfo[] | null = null;
       
       if (!forceRefresh) {
@@ -1007,7 +866,6 @@ export default function TokenSweeperPage() {
         if (rawTokens) {
           console.log(`📦 Using cached tokens: ${rawTokens.length} tokens`);
           
-          // Merge manual tokens into cached list (they may have been added after caching)
           if (manualTokens.size > 0) {
             const cachedAddrs = new Set(rawTokens.map(t => t.address.toLowerCase()));
             const manualArray: string[] = [...manualTokens];
@@ -1020,7 +878,6 @@ export default function TokenSweeperPage() {
               const manualInfos = await fetchTokenInfos(missingManual as Address[], address, publicClient);
               const validManual = manualInfos.filter(t => t.balance > 0n);
               
-              // Add to rawTokens
               for (const t of validManual) {
                 rawTokens.push({
                   address: t.address,
@@ -1034,27 +891,22 @@ export default function TokenSweeperPage() {
               
               if (validManual.length > 0) {
                 console.log(`📌 Added ${validManual.length} manual tokens to cached list`);
-                // Update cache with new tokens
                 setCachedTokens(address, chainId, rawTokens);
               }
             }
           }
         }
       } else {
-        // Force refresh - clear token and price caches, but KEEP spam cache
         clearTokenCache(address, chainId);
         clearPriceCache(chainId);
         console.log('🔄 Force refresh - cleared token and price caches (spam list preserved)');
       }
       
-      // Fetch tokens if not cached
       if (!rawTokens) {
         setProgressStep('Fetching token list...');
         
-        // Fetch token list from multiple sources
         let tokenAddresses = await fetchTokenList(chainId, address);
         
-        // Merge with manual tokens (always include these)
         if (manualTokens.size > 0) {
           const manualAddrs = Array.from(manualTokens) as Address[];
           const existingSet = new Set(tokenAddresses.map(a => a.toLowerCase()));
@@ -1073,10 +925,8 @@ export default function TokenSweeperPage() {
         
         setProgressStep(`Checking ${tokenAddresses.length} tokens...`);
         
-        // Get token info and balances via multicall
         const tokenInfos = await fetchTokenInfos(tokenAddresses, address, publicClient);
         
-        // Filter tokens with balance > 0
         const validTokens = tokenInfos.filter(t => t.balance > 0n);
         
         if (validTokens.length === 0) {
@@ -1084,7 +934,6 @@ export default function TokenSweeperPage() {
           return;
         }
         
-        // Convert to raw tokens for caching (bigint -> string)
         rawTokens = validTokens.map(t => ({
           address: t.address,
           symbol: t.symbol,
@@ -1094,30 +943,30 @@ export default function TokenSweeperPage() {
           logoUrl: t.logoUrl
         }));
         
-        // Cache the tokens
         setCachedTokens(address, chainId, rawTokens);
         console.log(`💾 Cached ${rawTokens.length} tokens`);
       }
       
       setProgressStep('Loading spam lists...');
       
-      // Log all tokens found for debugging
       console.log(`📋 All ${rawTokens.length} tokens in wallet:`, rawTokens.map(t => t.symbol).join(', '));
       
-      // Get combined spam list (external GitHub list + runtime failures)
-      const spamTokens = await getAllSpamTokens(chainId);
+      // Get spam lists: external GitHub list + user-hidden tokens
+
+      const { addresses: externalSpam, patterns: externalPatterns } = await fetchExternalSpamList(chainId);
+      const userHidden = getUserHiddenTokens(chainId);
+
+      // Combine spam sources
+      const spamTokens = new Set([...externalSpam, ...userHidden]);
+
+// Get spam symbol patterns for heuristic detection (use external patterns or fallback to localStorage)
+const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPatterns(chainId);
       
-      // Get spam symbol patterns for heuristic detection
-      const spamPatterns = getSpamPatterns(chainId);
-      
-      // Pre-filter raw tokens to remove spam BEFORE price fetching
-      // BUT always keep whitelisted tokens (known good DeFi tokens)
       let patternMatches = 0;
       let whitelistSaved = 0;
       const nonSpamRawTokens = rawTokens.filter(t => {
         const addrLower = t.address.toLowerCase();
         
-        // ALWAYS keep whitelisted tokens (CRV, PENDLE, AAVE, etc.) - check by address OR symbol
         if (isProtectedToken(chainId, addrLower, t.symbol)) {
           if (spamTokens.has(addrLower)) {
             whitelistSaved++;
@@ -1126,18 +975,13 @@ export default function TokenSweeperPage() {
           return true;
         }
         
-        // Check address blacklist
         if (spamTokens.has(addrLower)) {
-          // Log what's being filtered so we can debug
           console.log(`🚫 Filtering spam: ${t.symbol} (${t.address.slice(0, 10)}...)`);
           return false;
         }
-        // Check symbol patterns (heuristic detection)
         if (isSpamBySymbol(t.symbol, spamPatterns)) {
           patternMatches++;
           console.log(`🔍 Pattern match: ${t.symbol} (${t.address.slice(0, 10)}...)`);
-          // Also mark it as spam for future runs
-          markTokenAsFailed(chainId, t.address);
           return false;
         }
         return true;
@@ -1153,13 +997,11 @@ export default function TokenSweeperPage() {
       
       setProgressStep('Fetching market prices...');
       
-      // Use chain config for output token
       const outputTokenAddr = config.usdc;
       
-      // Check which tokens need price fetching
       const tokensNeedingPrices: Array<{ address: Address; decimals: number; balance: bigint; symbol: string }> = [];
-      const cachedPrices: Record<string, number> = {};
-      
+      const cachedPrices: Record<string, { price: number; source: string }> = {};
+
       for (const t of nonSpamRawTokens) {
         const addrLower = t.address.toLowerCase();
         
@@ -1176,108 +1018,110 @@ export default function TokenSweeperPage() {
           });
         }
       }
-      
+
       console.log(`💰 Using ${Object.keys(cachedPrices).length} cached prices, fetching ${tokensNeedingPrices.length} new`);
-      
+
       // Fetch prices for tokens that need them
-      let fetchedPrices: Record<string, number> = {};
+      let fetchedPrices: Record<string, { price: number; source: string }> = {};
       if (tokensNeedingPrices.length > 0) {
         fetchedPrices = await fetchMarketPrices(tokensNeedingPrices, chainId, outputTokenAddr, setProgressStep);
         
-        // Cache the fetched prices and mark failures
+        // Cache the fetched prices
         for (const t of tokensNeedingPrices) {
           const addrLower = t.address.toLowerCase();
           if (fetchedPrices[addrLower]) {
-            setCachedPrice(chainId, t.address, fetchedPrices[addrLower]);
-          } else {
-            // Mark as failed (spam token)
-            markTokenAsFailed(chainId, t.address);
+            setCachedPrice(chainId, t.address, fetchedPrices[addrLower].price, fetchedPrices[addrLower].source);
           }
         }
       }
-      
+
       // Combine cached and fetched prices
       const allPrices = { ...cachedPrices, ...fetchedPrices };
+
       
-      // Known stablecoins (fallback to $1 if 0x quote fails)
       const KNOWN_STABLECOINS: Record<number, Record<string, number>> = {
-        1: { // Ethereum mainnet
-          '0xdac17f958d2ee523a2206206994597c13d831ec7': 1, // USDT
-          '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': 1, // USDC
-          '0x6b175474e89094c44da98b954eedeac495271d0f': 1, // DAI
-          '0x4fabb145d64652a948d72533023f6e7a623c7c53': 1, // BUSD
-          '0x8e870d67f660d95d5be530380d0ec0bd388289e1': 1, // USDP
-          '0x0000000000085d4780b73119b644ae5ecd22b376': 1, // TUSD
-          '0x853d955acef822db058eb8505911ed77f175b99e': 1, // FRAX
-          '0x5f98805a4e8be255a32880fdec7f6728c6568ba0': 1, // LUSD
-          '0x57ab1ec28d129707052df4df418d58a2d46d5f51': 1, // sUSD
+        1: {
+          '0xdac17f958d2ee523a2206206994597c13d831ec7': 1,
+          '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': 1,
+          '0x6b175474e89094c44da98b954eedeac495271d0f': 1,
+          '0x4fabb145d64652a948d72533023f6e7a623c7c53': 1,
+          '0x8e870d67f660d95d5be530380d0ec0bd388289e1': 1,
+          '0x0000000000085d4780b73119b644ae5ecd22b376': 1,
+          '0x853d955acef822db058eb8505911ed77f175b99e': 1,
+          '0x5f98805a4e8be255a32880fdec7f6728c6568ba0': 1,
+          '0x57ab1ec28d129707052df4df418d58a2d46d5f51': 1,
         },
-        8453: { // Base
-          '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913': 1, // USDC
-          '0xd9aaec86b65d86f6a7b5b1b0c42ffa531710b6ca': 1, // USDbC
-          '0x50c5725949a6f0c72e6c4a641f24049a917db0cb': 1, // DAI
+        8453: {
+          '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913': 1,
+          '0xd9aaec86b65d86f6a7b5b1b0c42ffa531710b6ca': 1,
+          '0x50c5725949a6f0c72e6c4a641f24049a917db0cb': 1,
         },
-        42161: { // Arbitrum
-          '0xaf88d065e77c8cc2239327c5edb3a432268e5831': 1, // USDC
-          '0xff970a61a04b1ca14834a43f5de4533ebddb5cc8': 1, // USDC.e
-          '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9': 1, // USDT
-          '0xda10009cbd5d07dd0cecc66161fc93d7c9000da1': 1, // DAI
+        42161: {
+          '0xaf88d065e77c8cc2239327c5edb3a432268e5831': 1,
+          '0xff970a61a04b1ca14834a43f5de4533ebddb5cc8': 1,
+          '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9': 1,
+          '0xda10009cbd5d07dd0cecc66161fc93d7c9000da1': 1,
         },
-        10: { // Optimism
-          '0x0b2c639c533813f4aa9d7837caf62653d097ff85': 1, // USDC
-          '0x7f5c764cbc14f9669b88837ca1490cca17c31607': 1, // USDC.e
-          '0x94b008aa00579c1307b0ef2c499ad98a8ce58e58': 1, // USDT
-          '0xda10009cbd5d07dd0cecc66161fc93d7c9000da1': 1, // DAI
-          '0x2e3d870790dc77a83dd1d18184acc7439a53f475': 1, // FRAX
-          '0x8c6f28f2f1a3c87f0f938b96d27520d9751ec8d9': 1, // sUSD
+        10: {
+          '0x0b2c639c533813f4aa9d7837caf62653d097ff85': 1,
+          '0x7f5c764cbc14f9669b88837ca1490cca17c31607': 1,
+          '0x94b008aa00579c1307b0ef2c499ad98a8ce58e58': 1,
+          '0xda10009cbd5d07dd0cecc66161fc93d7c9000da1': 1,
+          '0x2e3d870790dc77a83dd1d18184acc7439a53f475': 1,
+          '0x8c6f28f2f1a3c87f0f938b96d27520d9751ec8d9': 1,
         },
-        137: { // Polygon
-          '0x3c499c542cef5e3811e1192ce70d8cc03d5c3359': 1, // USDC
-          '0x2791bca1f2de4661ed88a30c99a7a9449aa84174': 1, // USDC.e
-          '0xc2132d05d31c914a87c6611c10748aeb04b58e8f': 1, // USDT
-          '0x8f3cf7ad23cd3cadbd9735aff958023239c6a063': 1, // DAI
-          '0x45c32fa6df82ead1e2ef74d17b76547eddfaff89': 1, // FRAX
+        137: {
+          '0x3c499c542cef5e3811e1192ce70d8cc03d5c3359': 1,
+          '0x2791bca1f2de4661ed88a30c99a7a9449aa84174': 1,
+          '0xc2132d05d31c914a87c6611c10748aeb04b58e8f': 1,
+          '0x8f3cf7ad23cd3cadbd9735aff958023239c6a063': 1,
+          '0x45c32fa6df82ead1e2ef74d17b76547eddfaff89': 1,
         },
-        56: { // BNB Chain
-          '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d': 1, // USDC
-          '0x55d398326f99059ff775485246999027b3197955': 1, // USDT
-          '0x1af3f329e8be154074d8769d1ffa4ee058b1dbc3': 1, // DAI
-          '0xe9e7cea3dedca5984780bafc599bd69add087d56': 1, // BUSD
-          '0x14016e85a25aeb13065688cafb43044c2ef86784': 1, // TUSD
+        56: {
+          '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d': 1,
+          '0x55d398326f99059ff775485246999027b3197955': 1,
+          '0x1af3f329e8be154074d8769d1ffa4ee058b1dbc3': 1,
+          '0xe9e7cea3dedca5984780bafc599bd69add087d56': 1,
+          '0x14016e85a25aeb13065688cafb43044c2ef86784': 1,
         },
-        43114: { // Avalanche
-          '0xb97ef9ef8734c71904d8002f8b6bc66dd9c48a6e': 1, // USDC
-          '0xa7d7079b0fead91f3e65f86e8915cb59c1a4c664': 1, // USDC.e
-          '0x9702230a8ea53601f5cd2dc00fdbc13d4df4a8c7': 1, // USDT
-          '0xd586e7f844cea2f87f50152665bcbc2c279d8d70': 1, // DAI.e
-          '0x130966628846bfd36ff31a822705796e8cb8c18d': 1, // MIM
+        43114: {
+          '0xb97ef9ef8734c71904d8002f8b6bc66dd9c48a6e': 1,
+          '0xa7d7079b0fead91f3e65f86e8915cb59c1a4c664': 1,
+          '0x9702230a8ea53601f5cd2dc00fdbc13d4df4a8c7': 1,
+          '0xd586e7f844cea2f87f50152665bcbc2c279d8d70': 1,
+          '0x130966628846bfd36ff31a822705796e8cb8c18d': 1,
         },
-        534352: { // Scroll
-          '0x06efdbff2a14a7c8e15944d1f4a48f9f95f663a4': 1, // USDC
-          '0xf55bec9cafdbe8730f096aa55dad6d22d44099df': 1, // USDT
+        534352: {
+          '0x06efdbff2a14a7c8e15944d1f4a48f9f95f663a4': 1,
+          '0xf55bec9cafdbe8730f096aa55dad6d22d44099df': 1,
         },
-        59144: { // Linea
-          '0x176211869ca2b568f2a7d4ee941e073a821ee1ff': 1, // USDC
-          '0xa219439258ca9da29e9cc4ce5596924745e12b93': 1, // USDT
-          '0x4af15ec2a0bd43db75dd04e62faa3b8ef36b00d5': 1, // DAI
+        59144: {
+          '0x176211869ca2b568f2a7d4ee941e073a821ee1ff': 1,
+          '0xa219439258ca9da29e9cc4ce5596924745e12b93': 1,
+          '0x4af15ec2a0bd43db75dd04e62faa3b8ef36b00d5': 1,
         }
       };
       
       const chainStables = KNOWN_STABLECOINS[chainId] || {};
       
-      // Enrich tokens with prices (already filtered for spam)
       const enrichedTokens = nonSpamRawTokens
         .map(t => {
           const addrLower = t.address.toLowerCase();
-          // Use price, or fallback to stablecoin price
-          const price = allPrices[addrLower] || chainStables[addrLower] || 0;
+          const priceData = allPrices[addrLower];
+          let price = 0;
+          let priceSource: 'zerox' | 'defillama' | 'coingecko' | 'stablecoin' | 'unknown' = 'unknown';
+          
+          if (priceData) {
+            price = priceData.price;
+            priceSource = priceData.source as any;
+          } else if (chainStables[addrLower]) {
+            price = chainStables[addrLower];
+            priceSource = 'stablecoin';
+            console.log(`💵 Using stablecoin fallback for ${t.symbol}: $${price}`);
+          }
+
           const balance = BigInt(t.balance);
           const balanceNum = Number(formatUnits(balance, t.decimals));
-          
-          // Log if we used stablecoin fallback
-          if (!allPrices[addrLower] && chainStables[addrLower]) {
-            console.log(`💵 Using stablecoin fallback for ${t.symbol}: $${chainStables[addrLower]}`);
-          }
           
           return {
             address: t.address as Address,
@@ -1286,17 +1130,18 @@ export default function TokenSweeperPage() {
             decimals: t.decimals,
             balance,
             price,
+            priceSource,
             valueUsd: balanceNum * price,
             balanceFormatted: formatNumber(balanceNum, 4),
             logoUrl: t.logoUrl
           };
-        }).filter(t => t.valueUsd >= 0.10); // Filter dust < $0.10
+        }).filter(t => t.valueUsd >= 0.10 || t.priceSource === 'unknown');
       
-      // Sort by value descending
       enrichedTokens.sort((a, b) => b.valueUsd - a.valueUsd);
       
       setTokens(enrichedTokens);
-      setSelectedTokens(new Set(enrichedTokens.map(t => t.address)));
+      // Only auto-select tokens with known prices
+      setSelectedTokens(new Set(enrichedTokens.filter(t => t.priceSource !== 'unknown').map(t => t.address)));
       setCustomAmounts({});
       
     } catch (err: any) {
@@ -1305,19 +1150,16 @@ export default function TokenSweeperPage() {
     } finally {
       setIsScanning(false);
       setProgressStep('');
-      setHasScanned(true); // Mark that we've attempted a scan
+      setHasScanned(true);
     }
   }, [address, publicClient, chainId, supportedChain, config, manualTokens]);
 
-  // Reset hasScanned when wallet or chain changes
   useEffect(() => {
     setHasScanned(false);
   }, [address, chainId]);
 
-  // Auto-scan when wallet connects or changes (wait for manual tokens to load first)
   useEffect(() => {
     if (address && supportedChain && !isScanning && !hasScanned && tokens.length === 0 && manualTokensLoaded) {
-      // Small delay to let wallet connection settle
       const timer = setTimeout(() => {
         console.log('🔄 Auto-scanning new wallet...');
         scanWalletTokens();
@@ -1326,7 +1168,6 @@ export default function TokenSweeperPage() {
     }
   }, [address, supportedChain, scanWalletTokens, isScanning, hasScanned, tokens.length, manualTokensLoaded]);
 
-  // Fetch token list from unified API (handles all providers server-side)
   async function fetchTokenList(chainId: number, wallet: string): Promise<Address[]> {
     try {
       console.log('🔍 Fetching tokens via unified discovery API...');
@@ -1336,7 +1177,6 @@ export default function TokenSweeperPage() {
       
       if (res.ok) {
         const data = await res.json();
-        // Log the provider attempts
         if (data.logs) {
           data.logs.forEach((log: string) => console.log(`  📡 ${log}`));
         }
@@ -1352,7 +1192,6 @@ export default function TokenSweeperPage() {
     }
   }
 
-  // Fetch token info via multicall
   async function fetchTokenInfos(
     addresses: Address[], 
     wallet: string, 
@@ -1386,17 +1225,15 @@ export default function TokenSweeperPage() {
     });
   }
 
-  // Fetch prices from 0x quotes (accurate market prices) - batched for speed
   async function fetchMarketPrices(
     tokens: Array<{ address: Address; decimals: number; balance: bigint; symbol: string }>,
     chainId: number,
     outputToken: Address,
     onProgress?: (msg: string) => void
-  ): Promise<Record<string, number>> {
-    const prices: Record<string, number> = {};
+  ): Promise<Record<string, { price: number; source: string }>> {
+    const prices: Record<string, { price: number; source: string }> = {};
     const outputPrice = 1; // USDC = $1
     
-    // Get swapper address from chain config
     const chainConfig = CHAIN_CONFIG[chainId];
     if (!chainConfig) {
       console.warn(`No config for chain ${chainId}`);
@@ -1407,14 +1244,10 @@ export default function TokenSweeperPage() {
     
     console.log(`📊 Fetching market prices from 0x for ${tokens.length} tokens...`);
     
-    // Track failures for summary
-    const failedTokens: { address: string; symbol: string; reason: string }[] = [];
-    const autoSpammed: string[] = [];
     const tokensNeedingFallback: Array<{ address: Address; decimals: number; balance: bigint; symbol: string }> = [];
     
-    // Process in batches of 5 to avoid rate limiting
     const BATCH_SIZE = 5;
-    const BATCH_DELAY = 1500; // 1.5 seconds between batches
+    const BATCH_DELAY = 1500;
     const totalBatches = Math.ceil(tokens.length / BATCH_SIZE);
     
     for (let i = 0; i < tokens.length; i += BATCH_SIZE) {
@@ -1422,10 +1255,7 @@ export default function TokenSweeperPage() {
       const batchNum = Math.floor(i / BATCH_SIZE) + 1;
       onProgress?.(`Fetching prices (${batchNum}/${totalBatches})...`);
       
-      // Fetch all quotes in batch in parallel
       const batchPromises = batch.map(async (token) => {
-        const isWhitelisted = isKnownGoodToken(chainId, token.address);
-        
         try {
           const refAmount = parseUnits('1', token.decimals);
           
@@ -1439,7 +1269,6 @@ export default function TokenSweeperPage() {
           
           const res = await fetch(`/api/0x/quote?${params}`);
           if (!res.ok) {
-            // Queue for DefiLlama fallback instead of immediate failure
             tokensNeedingFallback.push(token);
             return null;
           }
@@ -1450,16 +1279,12 @@ export default function TokenSweeperPage() {
             const buyAmountNum = Number(formatUnits(BigInt(quote.buyAmount), outputDecimals));
             const sellAmountNum = Number(formatUnits(refAmount, token.decimals));
             const pricePerToken = (buyAmountNum / sellAmountNum) * outputPrice;
-            // Success - clear any previous failures
-            clearPriceFailure(chainId, token.address);
-            return { address: token.address.toLowerCase(), price: pricePerToken };
+            return { address: token.address.toLowerCase(), price: pricePerToken, source: 'zerox' };
           }
           
-          // No buyAmount = queue for DefiLlama fallback
           tokensNeedingFallback.push(token);
           return null;
         } catch (err: any) {
-          // Queue for DefiLlama fallback
           tokensNeedingFallback.push(token);
           return null;
         }
@@ -1467,23 +1292,23 @@ export default function TokenSweeperPage() {
       
       const results = await Promise.all(batchPromises);
       
-      // Collect successful prices
       for (const result of results) {
         if (result) {
-          prices[result.address] = result.price;
+          prices[result.address] = { price: result.price, source: result.source };
         }
       }
       
-      // Delay between batches (skip delay after last batch)
       if (i + BATCH_SIZE < tokens.length) {
         await new Promise(r => setTimeout(r, BATCH_DELAY));
       }
     }
     
-    // Try DefiLlama fallback for tokens that failed 0x
+    // Step 2: DefiLlama fallback
+    let stillNeedFallback: typeof tokensNeedingFallback = [];
+    
     if (tokensNeedingFallback.length > 0) {
       console.log(`  🔄 Trying DefiLlama fallback for ${tokensNeedingFallback.length} tokens...`);
-      onProgress?.(`Fallback price lookup (${tokensNeedingFallback.length} tokens)...`);
+      onProgress?.(`Fallback: DefiLlama (${tokensNeedingFallback.length} tokens)...`);
       
       const llamaPrices = await fetchDefiLlamaPrices(
         tokensNeedingFallback.map(t => t.address as Address),
@@ -1492,46 +1317,47 @@ export default function TokenSweeperPage() {
       
       for (const token of tokensNeedingFallback) {
         const llamaPrice = llamaPrices[token.address.toLowerCase()];
-        const isWhitelisted = isProtectedToken(chainId, token.address, token.symbol);
         
         if (llamaPrice && llamaPrice > 0) {
-          // DefiLlama succeeded - use this price
-          prices[token.address.toLowerCase()] = llamaPrice;
-          clearPriceFailure(chainId, token.address);
+          prices[token.address.toLowerCase()] = { price: llamaPrice, source: 'defillama' };
           console.log(`    ✅ ${token.symbol}: $${llamaPrice.toFixed(4)} (DefiLlama)`);
         } else {
-          // Both 0x and DefiLlama failed
-          failedTokens.push({ address: token.address, symbol: token.symbol, reason: 'no price data' });
-          
-          // NEVER mark whitelisted tokens as spam (check by address OR symbol)
-          if (isWhitelisted) {
-            console.log(`    ⚠️ ${token.symbol}: No price, but PROTECTED (whitelist)`);
-          } else {
-            // Track failure for non-whitelisted tokens
-            const failCount = incrementPriceFailure(chainId, token.address);
-            if (failCount >= PRICE_FAIL_THRESHOLD) {
-              markTokenAsFailed(chainId, token.address);
-              autoSpammed.push(`${token.symbol} (${token.address.slice(0, 10)}...)`);
-            }
-          }
+          stillNeedFallback.push(token);
         }
       }
     }
+
+    // Step 3: CoinGecko fallback
+    if (stillNeedFallback.length > 0) {
+      console.log(`  🔄 Trying CoinGecko for ${stillNeedFallback.length} tokens...`);
+      onProgress?.(`Fallback: CoinGecko (${stillNeedFallback.length} tokens)...`);
+      
+      try {
+        const cgPrices = await fetchCoinGeckoPrices(
+          stillNeedFallback.map(t => t.address),
+          chainId
+        );
+        
+        for (const token of stillNeedFallback) {
+          const cgPrice = cgPrices[token.address.toLowerCase()];
+          if (cgPrice && cgPrice > 0) {
+            prices[token.address.toLowerCase()] = { price: cgPrice, source: 'coingecko' };
+            console.log(`    ✅ ${token.symbol}: $${cgPrice.toFixed(4)} (CoinGecko)`);
+          } else {
+            console.log(`    ❓ ${token.symbol}: No price available`);
+          }
+        }
+      } catch (e) {
+        console.warn('CoinGecko fallback failed:', e);
+      }
+    }
     
-    // Summary logs
     const successCount = Object.keys(prices).length;
     console.log(`  ✅ Got prices for ${successCount}/${tokens.length} tokens`);
-    if (failedTokens.length > 0) {
-      console.log(`  ⚠️ ${failedTokens.length} tokens had no price (no liquidity or API error)`);
-    }
-    if (autoSpammed.length > 0) {
-      console.log(`  🚫 Auto-marked ${autoSpammed.length} tokens as spam (${PRICE_FAIL_THRESHOLD}+ failures): ${autoSpammed.join(', ')}`);
-    }
     
     return prices;
   }
 
-  // Fallback: Fetch prices from DefiLlama (less accurate but fast)
   async function fetchDefiLlamaPrices(addresses: Address[], chainId: number): Promise<Record<string, number>> {
     const chainNameMap: Record<number, string> = {
       1: 'ethereum',
@@ -1564,11 +1390,36 @@ export default function TokenSweeperPage() {
     }
   }
 
+  async function fetchCoinGeckoPrices(addresses: string[], chainId: number): Promise<Record<string, number>> {
+    try {
+      const res = await fetch('/api/coingecko/prices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chainId, addresses })
+      });
+      
+      if (!res.ok) {
+        console.warn('CoinGecko API error:', res.status);
+        return {};
+      }
+      
+      const data = await res.json();
+      
+      if (data.logs) {
+        data.logs.forEach((log: string) => console.log(`    📡 ${log}`));
+      }
+      
+      return data.prices || {};
+    } catch (e) {
+      console.warn('CoinGecko fetch failed:', e);
+      return {};
+    }
+  }
+
   // ============================================================================
   // SWAP EXECUTION WITH ROBUST BATCH HANDLING
   // ============================================================================
 
-  // Simulate each swap individually to find failures (parallel)
   const simulateSwaps = async (plan: SwapStep[], recipient: Address): Promise<{
     passing: SwapStep[];
     failing: Array<{ swap: SwapStep; error: string }>;
@@ -1577,7 +1428,6 @@ export default function TokenSweeperPage() {
     console.log(`Testing ${plan.length} swaps in parallel on chain ${chainId}...`);
     console.log(`Contract: ${config.swapper}`);
     
-    // Log each swap's parameters
     plan.forEach((swap, idx) => {
       console.log(`  Swap ${idx + 1}: ${swap.tokenIn.slice(0, 10)}... → quotedOut=${swap.quotedOut.toString()}, slippageBps=${swap.slippageBps}`);
     });
@@ -1588,7 +1438,7 @@ export default function TokenSweeperPage() {
           address: config.swapper,
           abi: SWAPPER_ABI,
           functionName: 'executePlanFromCaller',
-          // @ts-ignore viem strict typing doesn't match our SwapStep interface
+          // @ts-ignore
           args: [[swap], recipient],
           account: recipient,
         });
@@ -1599,12 +1449,10 @@ export default function TokenSweeperPage() {
         const fullError = String(e.message || e);
         const errorMsg = fullError.toLowerCase();
         
-        // ALWAYS log the raw error for debugging
         console.error(`  ❌ Raw error for swap ${idx + 1} (${swap.tokenIn.slice(0,10)}...):`, fullError.substring(0, 300));
         
         let reason = 'Unknown error';
         
-        // Parse specific error types - ORDER MATTERS, check specific errors first
         if (errorMsg.includes('aggregator') && errorMsg.includes('whitelist')) {
           reason = 'Aggregator not whitelisted - check contract config';
         } else if (errorMsg.includes('selector') && errorMsg.includes('whitelist')) {
@@ -1612,10 +1460,8 @@ export default function TokenSweeperPage() {
         } else if (errorMsg.includes('outtoken') && errorMsg.includes('allowed')) {
           reason = 'Output token not allowed - check contract config';
         } else if (errorMsg.includes('#1002') || errorMsg.includes('agg swap fail')) {
-          // Check aggregator failures BEFORE slippage since viem errors include "slippageBps" in function sig
           reason = 'Swap failed - token may have transfer tax or no liquidity';
         } else if (errorMsg.includes('slippage exceeded') || errorMsg.includes('too little received') || errorMsg.includes('slippage too high')) {
-          // Be more specific to avoid matching "slippageBps" parameter name
           reason = 'Slippage exceeded - price moved too much';
         } else if (errorMsg.includes('insufficient') && errorMsg.includes('balance')) {
           reason = 'Insufficient balance';
@@ -1628,7 +1474,6 @@ export default function TokenSweeperPage() {
         } else if (errorMsg.includes('expired') || errorMsg.includes('deadline')) {
           reason = 'Quote expired - try again';
         } else {
-          // Extract just the revert reason if present
           const revertMatch = errorMsg.match(/reverted with the following reason:\s*([^\n]+)/i);
           if (revertMatch) {
             reason = revertMatch[1].trim();
@@ -1660,7 +1505,6 @@ export default function TokenSweeperPage() {
     return { passing, failing };
   };
 
-  // Isolate problem tokens in a failed batch by exclusion testing
   const isolateProblemTokens = async (
     failedPlan: SwapStep[],
     recipient: Address
@@ -1676,13 +1520,12 @@ export default function TokenSweeperPage() {
     while (attempts < maxAttempts && remainingPlan.length > 1) {
       attempts++;
       
-      // Try to simulate the current remaining plan as a batch
       try {
         await publicClient!.estimateContractGas({
           address: config.swapper,
           abi: SWAPPER_ABI,
           functionName: 'executePlanFromCaller',
-          // @ts-ignore viem strict typing doesn't match our SwapStep interface
+          // @ts-ignore
           args: [remainingPlan, recipient],
           account: recipient,
         });
@@ -1695,7 +1538,6 @@ export default function TokenSweeperPage() {
         
         let foundProblem = false;
         
-        // Try excluding each token one at a time
         for (let i = 0; i < remainingPlan.length; i++) {
           const testPlan = remainingPlan.filter((_, idx) => idx !== i);
           const excludedSwap = remainingPlan[i];
@@ -1707,7 +1549,7 @@ export default function TokenSweeperPage() {
               address: config.swapper,
               abi: SWAPPER_ABI,
               functionName: 'executePlanFromCaller',
-              // @ts-ignore viem strict typing doesn't match our SwapStep interface
+              // @ts-ignore
               args: [testPlan, recipient],
               account: recipient,
             });
@@ -1736,7 +1578,6 @@ export default function TokenSweeperPage() {
     return { workingPlan: remainingPlan, problemTokens };
   };
 
-  // Execute problem tokens individually with higher slippage
   const executeProblemTokensIndividually = async (
     problemTokens: SwapStep[],
     recipient: Address
@@ -1745,7 +1586,7 @@ export default function TokenSweeperPage() {
     
     let successCount = 0;
     const successfulAddresses: string[] = [];
-    const BOOSTED_SLIPPAGE = 500; // 5% for problem tokens
+    const BOOSTED_SLIPPAGE = 500;
     
     for (const swap of problemTokens) {
       console.log(`  Attempting: ${swap.tokenIn}`);
@@ -1756,18 +1597,17 @@ export default function TokenSweeperPage() {
       };
       
       try {
-        // Estimate gas first
         let gas: bigint;
         try {
           gas = await publicClient!.estimateContractGas({
             address: config.swapper,
             abi: SWAPPER_ABI,
             functionName: 'executePlanFromCaller',
-            // @ts-ignore viem strict typing doesn't match our SwapStep interface
+            // @ts-ignore
             args: [[modifiedSwap], recipient],
             account: recipient,
           });
-          gas = (gas * 150n) / 100n; // 50% buffer
+          gas = (gas * 150n) / 100n;
         } catch {
           console.log(`    ❌ Gas estimation failed - skipping`);
           continue;
@@ -1777,14 +1617,13 @@ export default function TokenSweeperPage() {
           address: config.swapper,
           abi: SWAPPER_ABI,
           functionName: 'executePlanFromCaller',
-          // @ts-ignore viem strict typing doesn't match our SwapStep interface
+          // @ts-ignore
           args: [[modifiedSwap], recipient],
           gas
         });
         
         const receipt = await publicClient!.waitForTransactionReceipt({ hash });
         
-        // Check if transaction actually succeeded
         if (receipt.status === 'reverted') {
           throw new Error('Transaction reverted on-chain');
         }
@@ -1801,7 +1640,6 @@ export default function TokenSweeperPage() {
     return { successCount, successfulAddresses };
   };
 
-  // Phase 1: Fetch quotes and show preview modal
   const fetchQuotesAndShowPreview = useCallback(async () => {
     if (!address || !publicClient || selectedTokens.size === 0) return;
     
@@ -1809,11 +1647,9 @@ export default function TokenSweeperPage() {
     setError(null);
     
     try {
-      // Brief delay to let 0x rate limit recover after price fetching
       setProgressStep('Preparing quotes...');
       await new Promise(r => setTimeout(r, 2500));
       
-      // Get selected tokens with amounts
       const tokensToSwap = tokens
         .filter((t: TokenInfo) => selectedTokens.has(t.address))
         .map((t: TokenInfo) => {
@@ -1840,7 +1676,6 @@ export default function TokenSweeperPage() {
       const outputTokenAddr = outputToken === 'USDC' ? config.usdc : config.weth;
       const outputDecimals = outputToken === 'USDC' ? config.usdcDecimals : 18;
       
-      // Output token price (USDC = $1, WETH needs lookup)
       let outputPrice = 1;
       if (outputToken === 'WETH') {
         setProgressStep('Fetching ETH price...');
@@ -1849,16 +1684,15 @@ export default function TokenSweeperPage() {
           const data = await res.json();
           outputPrice = data.coins?.['coingecko:ethereum']?.price || 3500;
         } catch {
-          outputPrice = 3500; // Fallback
+          outputPrice = 3500;
         }
       }
       
-      // Fetch quotes for all tokens in batches
       const successfulQuotes: QuotePreviewItem[] = [];
       const failedQuotes: FailedQuoteItem[] = [];
       
       const QUOTE_BATCH_SIZE = 5;
-      const QUOTE_BATCH_DELAY = 1500; // 1.5 seconds between batches
+      const QUOTE_BATCH_DELAY = 1500;
       
       console.log(`📊 Fetching quotes for ${tokensToSwap.length} tokens (batches of ${QUOTE_BATCH_SIZE})...`);
       
@@ -1870,7 +1704,6 @@ export default function TokenSweeperPage() {
         setProgressStep(`Fetching quotes (batch ${batchNum}/${totalBatches})...`);
         console.log(`  Batch ${batchNum}/${totalBatches}: ${batch.map((t: TokenWithAmount) => t.symbol).join(', ')}`);
         
-        // Fetch main quotes for this batch in parallel
         const mainQuotePromises = batch.map(async (token: TokenWithAmount) => {
           try {
             const quote = await fetch0xQuote(
@@ -1888,17 +1721,14 @@ export default function TokenSweeperPage() {
         
         const mainResults = await Promise.all(mainQuotePromises);
         
-        // Small delay before reference quotes
         await new Promise(r => setTimeout(r, 300));
         
-        // Fetch reference quotes for successful main quotes in parallel
         const tokensNeedingRef = mainResults.filter((r: { token: TokenWithAmount; quote: any; error: string | null }) => r.quote?.transaction?.data);
         
         const refQuotePromises = tokensNeedingRef.map(async ({ token, quote }: { token: TokenWithAmount; quote: any }) => {
           try {
-            // Use a small amount to get market rate (~$1 worth, minimal slippage)
             const tokenPriceEstimate = token.valueUsd / Number(formatUnits(token.amountToSwap, token.decimals));
-            const refTokenAmount = Math.max(1, Math.ceil(1 / tokenPriceEstimate)); // ~$1 worth
+            const refTokenAmount = Math.max(1, Math.ceil(1 / tokenPriceEstimate));
             const refAmount = parseUnits(refTokenAmount.toString(), token.decimals);
             
             const refQuote = await fetch0xQuote(
@@ -1910,14 +1740,12 @@ export default function TokenSweeperPage() {
             );
             return { token, mainQuote: quote, refQuote, error: null };
           } catch (err: any) {
-            // Reference quote failed, but we still have main quote
             return { token, mainQuote: quote, refQuote: null, error: err.message };
           }
         });
         
         const refResults = await Promise.all(refQuotePromises);
         
-        // Process results
         for (const { token, mainQuote, refQuote, error } of refResults) {
           const buyAmountBigInt = BigInt(mainQuote.buyAmount);
           const quotedOutputUsd = Number(formatUnits(buyAmountBigInt, outputDecimals)) * outputPrice;
@@ -1926,7 +1754,6 @@ export default function TokenSweeperPage() {
           let priceImpact: number;
           
           if (refQuote?.buyAmount) {
-            // Calculate market price from reference quote
             const tokenPriceEstimate = token.valueUsd / Number(formatUnits(token.amountToSwap, token.decimals));
             const refTokenAmount = Math.max(1, Math.ceil(1 / tokenPriceEstimate));
             const refAmount = parseUnits(refTokenAmount.toString(), token.decimals);
@@ -1935,18 +1762,15 @@ export default function TokenSweeperPage() {
             const refSellAmount = Number(formatUnits(refAmount, token.decimals));
             const marketPricePerToken = (refBuyAmount / refSellAmount) * outputPrice;
             
-            // Calculate input value at market rate
             const sellAmountNum = Number(formatUnits(token.amountToSwap, token.decimals));
             inputValueUsd = sellAmountNum * marketPricePerToken;
-            // Price impact should never be negative - if output > input that's favorable
             priceImpact = inputValueUsd > 0 ? Math.max(0, ((inputValueUsd - quotedOutputUsd) / inputValueUsd) * 100) : 0;
             
             console.log(`    ${token.symbol}: impact=${quotedOutputUsd >= inputValueUsd ? '~0%' : priceImpact.toFixed(2) + '%'}`);
           } else {
-            // Fallback: use output as input value, but use conservative slippage since we don't know impact
             console.warn(`    ${token.symbol}: ref quote failed, using output as value (will use 2% slippage)`);
             inputValueUsd = quotedOutputUsd;
-            priceImpact = 2; // Assume 2% to be safe when we can't calculate
+            priceImpact = 2;
           }
           
           const swapQuote: SwapQuote = {
@@ -1965,11 +1789,10 @@ export default function TokenSweeperPage() {
             lossPercent: priceImpact,
             lossUsd: Math.max(0, inputValueUsd - quotedOutputUsd),
             quote: swapQuote,
-            selected: priceImpact < 10 // Auto-deselect if > 10% price impact
+            selected: priceImpact < 10
           });
         }
         
-        // Add failed main quotes
         for (const { token, quote, error } of mainResults) {
           if (!quote?.transaction?.data) {
             console.warn(`    ${token.symbol}: quote failed - ${error}`);
@@ -1977,7 +1800,6 @@ export default function TokenSweeperPage() {
           }
         }
         
-        // Delay before next batch (if not last batch)
         if (batchStart + QUOTE_BATCH_SIZE < tokensToSwap.length) {
           await new Promise(r => setTimeout(r, QUOTE_BATCH_DELAY));
         }
@@ -1991,7 +1813,6 @@ export default function TokenSweeperPage() {
         return;
       }
       
-      // Show preview modal
       setQuotePreviewData({
         quotes: successfulQuotes,
         failedQuotes,
@@ -2010,7 +1831,6 @@ export default function TokenSweeperPage() {
     }
   }, [address, publicClient, selectedTokens, tokens, customAmounts, outputToken, config, chainId]);
 
-  // Toggle quote selection in preview
   const toggleQuoteSelection = useCallback((tokenAddress: string) => {
     if (!quotePreviewData) return;
     
@@ -2027,7 +1847,6 @@ export default function TokenSweeperPage() {
     });
   }, [quotePreviewData]);
 
-  // Toggle force high slippage for a token in preview
   const toggleForceSlippage = useCallback((tokenAddress: string) => {
     if (!quotePreviewData) return;
     
@@ -2044,7 +1863,6 @@ export default function TokenSweeperPage() {
     });
   }, [quotePreviewData]);
 
-  // Phase 2: Execute confirmed swaps
   const executeConfirmedSwaps = useCallback(async () => {
     if (!address || !publicClient || !quotePreviewData) return;
     
@@ -2054,7 +1872,6 @@ export default function TokenSweeperPage() {
       return;
     }
     
-    // Separate high-impact tokens that need Force but don't have it
     const executableQuotes = selectedQuotes.filter((q: QuotePreviewItem) => 
       q.lossPercent <= 5 || q.forceHighSlippage
     );
@@ -2078,7 +1895,6 @@ export default function TokenSweeperPage() {
     let totalFailed = 0;
     const results: SwapResultDetail[] = [];
     
-    // Pre-populate skipped high-impact tokens
     for (const sq of skippedHighImpact) {
       results.push({
         symbol: sq.token.symbol,
@@ -2101,7 +1917,6 @@ export default function TokenSweeperPage() {
     const outputTokenAddr = outToken === 'USDC' ? config.usdc : config.weth;
     
     try {
-      // Get output token balance BEFORE swaps
       const balanceBefore = await publicClient.readContract({
         address: outputTokenAddr,
         abi: ERC20_ABI,
@@ -2111,11 +1926,9 @@ export default function TokenSweeperPage() {
       
       const tokensToSwap = executableQuotes.map((q: QuotePreviewItem) => q.token);
 
-      // Step 1: Check and do approvals (track if any were needed)
       setProgressStep(`Checking approvals...`);
       let approvalsNeeded = 0;
       
-      // USDT on mainnet requires approval reset to 0 before setting new value
       const USDT_MAINNET = '0xdac17f958d2ee523a2206206994597c13d831ec7';
       
       for (let i = 0; i < tokensToSwap.length; i++) {
@@ -2133,7 +1946,6 @@ export default function TokenSweeperPage() {
             approvalsNeeded++;
             setProgressStep(`Approving ${token.symbol} (${approvalsNeeded})...`);
             
-            // USDT special case: reset to 0 first if there's existing allowance
             const isUSDT = chainId === 1 && token.address.toLowerCase() === USDT_MAINNET;
             if (isUSDT && allowance > 0n) {
               console.log(`📝 Resetting USDT approval to 0 first (required by USDT contract)`);
@@ -2149,7 +1961,6 @@ export default function TokenSweeperPage() {
               }
             }
             
-            // Approve for 10x current balance to avoid re-approvals on future swaps
             const approvalAmount = token.balance * 10n;
             console.log(`📝 Approving ${token.symbol}: ${formatUnits(approvalAmount, token.decimals)} (10x balance)`);
             
@@ -2173,7 +1984,6 @@ export default function TokenSweeperPage() {
       
       console.log(`✅ Approvals complete: ${approvalsNeeded} needed`);
 
-      // Filter out tokens that failed approval
       let quotesToExecute = executableQuotes.filter(
         (sq: QuotePreviewItem) => !failedTokens.has(sq.token.address.toLowerCase())
       );
@@ -2182,12 +1992,10 @@ export default function TokenSweeperPage() {
         throw new Error('All token approvals failed');
       }
       
-      // Step 2: Re-fetch quotes ONLY if any approvals were needed (prices may have moved)
       if (approvalsNeeded > 0) {
         setProgressStep('Refreshing quotes...');
         console.log(`🔄 Re-fetching ${quotesToExecute.length} quotes (${approvalsNeeded} approvals caused delay)...`);
         
-        // Re-fetch quotes in parallel batches
         const REQUOTE_BATCH_SIZE = 5;
         const freshQuotes: typeof executableQuotes = [];
         
@@ -2198,7 +2006,6 @@ export default function TokenSweeperPage() {
           
           setProgressStep(`Refreshing quotes (${batchNum}/${totalBatches})...`);
           
-          // Fetch all quotes in this batch in parallel
           const quotePromises = batch.map(async (sq: QuotePreviewItem) => {
             try {
               const freshQuote = await fetch0xQuote(
@@ -2219,10 +2026,9 @@ export default function TokenSweeperPage() {
             }
           });
           
-          const results = await Promise.all(quotePromises);
+          const batchResults = await Promise.all(quotePromises);
           
-          // Process results
-          for (const { sq, freshQuote, error } of results) {
+          for (const { sq, freshQuote, error } of batchResults) {
             if (freshQuote) {
               const newBuyAmount = BigInt(freshQuote.buyAmount);
               const newQuotedOutputUsd = Number(formatUnits(newBuyAmount, outputDecimals)) * outputPrice;
@@ -2258,7 +2064,6 @@ export default function TokenSweeperPage() {
             }
           }
           
-          // Small delay between batches
           if (batchStart + REQUOTE_BATCH_SIZE < quotesToExecute.length) {
             await new Promise(r => setTimeout(r, 300));
           }
@@ -2274,7 +2079,6 @@ export default function TokenSweeperPage() {
         console.log('✅ No approvals needed - using original quotes');
       }
 
-      // Step 3: Execute in batches with per-batch simulation
       const EXECUTION_BATCH_SIZE = 5;
       const totalBatches = Math.ceil(quotesToExecute.length / EXECUTION_BATCH_SIZE);
       
@@ -2286,7 +2090,6 @@ export default function TokenSweeperPage() {
         
         console.log(`\n📦 Batch ${batchNum}/${totalBatches}: ${batchQuotes.map((sq: QuotePreviewItem) => sq.token.symbol).join(', ')}`);
         
-        // Build swap plan for this batch
         setProgressStep(`Batch ${batchNum}/${totalBatches}: Building plan...`);
         const batchPlan: SwapStep[] = batchQuotes.map((sq: QuotePreviewItem) => {
           const q = sq.quote;
@@ -2296,12 +2099,10 @@ export default function TokenSweeperPage() {
           );
           
           const priceImpactBps = Math.ceil((q.priceImpact || 0) * 100);
-          // Base slippage of 30 bps (0.3%), scales up with price impact
           const dynamicSlippage = sq.forceHighSlippage
             ? Math.min(9900, Math.max(500, priceImpactBps + 1000))
             : Math.min(500, Math.max(30, 30 + Math.ceil(priceImpactBps * 1.5)));
           
-          // Log swap parameters for debugging - including the ROUTER ADDRESS
           console.log(`  ${sq.token.symbol}: router=${q.transactionTo}, slippageBps=${dynamicSlippage}`);
           
           return {
@@ -2322,11 +2123,9 @@ export default function TokenSweeperPage() {
           };
         });
         
-        // Simulate this batch
         setProgressStep(`Batch ${batchNum}/${totalBatches}: Simulating...`);
         const { passing, failing } = await simulateSwaps(batchPlan, address);
         
-        // Mark simulation failures
         for (const { swap, error } of failing) {
           failedTokens.set(swap.tokenIn.toLowerCase(), error);
           totalFailed++;
@@ -2337,7 +2136,6 @@ export default function TokenSweeperPage() {
           continue;
         }
         
-        // Validate batch with gas estimation
         setProgressStep(`Batch ${batchNum}/${totalBatches}: Validating...`);
         let planToExecute = passing;
         let problemTokensToRetry: SwapStep[] = [];
@@ -2347,7 +2145,7 @@ export default function TokenSweeperPage() {
             address: config.swapper,
             abi: SWAPPER_ABI,
             functionName: 'executePlanFromCaller',
-            // @ts-ignore viem strict typing doesn't match our SwapStep interface
+            // @ts-ignore
             args: [passing, address],
             account: address,
           });
@@ -2363,7 +2161,6 @@ export default function TokenSweeperPage() {
           if (workingPlan.length === 0) {
             console.log(`  ⚠️ No working batch found, will try all tokens individually`);
             
-            // Execute all tokens individually with higher slippage
             const { successCount, successfulAddresses } = await executeProblemTokensIndividually(passing, address);
             
             for (const addr of successfulAddresses) {
@@ -2371,7 +2168,6 @@ export default function TokenSweeperPage() {
             }
             totalSuccess += successCount;
             
-            // Mark failed tokens
             for (const swap of passing) {
               const addr = swap.tokenIn.toLowerCase();
               if (!successfulAddresses.includes(addr)) {
@@ -2380,11 +2176,10 @@ export default function TokenSweeperPage() {
               }
             }
             
-            continue; // Skip to next batch
+            continue;
           }
         }
         
-        // Execute the working batch
         if (planToExecute.length > 0) {
           setProgressStep(`Batch ${batchNum}/${totalBatches}: Executing ${planToExecute.length} swaps...`);
           
@@ -2393,7 +2188,7 @@ export default function TokenSweeperPage() {
               address: config.swapper,
               abi: SWAPPER_ABI,
               functionName: 'executePlanFromCaller',
-              // @ts-ignore viem strict typing doesn't match our SwapStep interface
+              // @ts-ignore
               args: [planToExecute, address],
               account: address,
             });
@@ -2402,7 +2197,7 @@ export default function TokenSweeperPage() {
               address: config.swapper,
               abi: SWAPPER_ABI,
               functionName: 'executePlanFromCaller',
-              // @ts-ignore viem strict typing doesn't match our SwapStep interface
+              // @ts-ignore
               args: [planToExecute, address],
               gas: (gas * 130n) / 100n
             });
@@ -2425,13 +2220,11 @@ export default function TokenSweeperPage() {
             console.error(`  ❌ Batch ${batchNum} execution failed:`, errorMsg.slice(0, 100));
             
             if (errorMsg.includes('reverted on-chain') || errorMsg.includes('Transaction reverted')) {
-              // On-chain revert - mark all as failed
               for (const swap of planToExecute) {
                 failedTokens.set(swap.tokenIn.toLowerCase(), 'Transaction reverted: likely slippage exceeded');
                 totalFailed++;
               }
             } else {
-              // Try individual execution as fallback
               const { successCount, successfulAddresses } = await executeProblemTokensIndividually(planToExecute, address);
               
               for (const addr of successfulAddresses) {
@@ -2450,7 +2243,6 @@ export default function TokenSweeperPage() {
           }
         }
         
-        // Execute problem tokens individually
         if (problemTokensToRetry.length > 0) {
           console.log(`  🔄 Trying ${problemTokensToRetry.length} problem tokens individually...`);
           const { successCount, successfulAddresses } = await executeProblemTokensIndividually(problemTokensToRetry, address);
@@ -2469,13 +2261,11 @@ export default function TokenSweeperPage() {
           }
         }
         
-        // Small delay between batches
         if (batchStart + EXECUTION_BATCH_SIZE < quotesToExecute.length) {
           await new Promise(r => setTimeout(r, 500));
         }
       }
 
-      // Build and show detailed results
       setProgressStep('Finalizing...');
       
       const balanceAfter = await publicClient.readContract({
@@ -2495,7 +2285,6 @@ export default function TokenSweeperPage() {
         totalReceivedUsd: totalReceivedUsd.toFixed(6)
       });
       
-      // Build detailed results for executed tokens
       for (const sq of quotesToExecute) {
         const addr = sq.token.address.toLowerCase();
         
@@ -2528,10 +2317,8 @@ export default function TokenSweeperPage() {
         }
       }
       
-      // Add tokens that failed approval or re-quoting (in executableQuotes but not in quotesToExecute)
       for (const sq of executableQuotes) {
         const addr = sq.token.address.toLowerCase();
-        // Add if it failed and we haven't already added it
         if (failedTokens.has(addr) && !results.some(r => r.tokenIn.toLowerCase() === addr)) {
           results.push({
             symbol: sq.token.symbol,
@@ -2548,7 +2335,6 @@ export default function TokenSweeperPage() {
         }
       }
       
-      // Add failed quotes
       for (const fq of quotePreviewData.failedQuotes) {
         results.push({
           symbol: fq.token.symbol,
@@ -2572,7 +2358,6 @@ export default function TokenSweeperPage() {
       });
       setShowResultsModal(true);
       
-      // Force refresh to get new balances after swap
       await scanWalletTokens(true);
       
     } catch (err: any) {
@@ -2583,10 +2368,9 @@ export default function TokenSweeperPage() {
       setProgressStep('');
       setQuotePreviewData(null);
     }
-  }, [address, publicClient, quotePreviewData, config, writeContractAsync, scanWalletTokens, simulateSwaps, isolateProblemTokens, executeProblemTokensIndividually]);
+  }, [address, publicClient, quotePreviewData, config, writeContractAsync, scanWalletTokens, simulateSwaps, isolateProblemTokens, executeProblemTokensIndividually, chainId]);
 
 
-  // Fetch 0x quote
   async function fetch0xQuote(
     chainId: number,
     sellToken: string,
@@ -2617,11 +2401,16 @@ export default function TokenSweeperPage() {
   // COMPUTED VALUES
   // ============================================================================
 
-  // Filter out the currently selected output token from display
   const displayTokens = useMemo(() => {
     const outputTokenAddr = outputToken === 'USDC' ? config.usdc : config.weth;
     return tokens.filter((t: TokenInfo) => t.address.toLowerCase() !== outputTokenAddr.toLowerCase());
   }, [tokens, outputToken, config]);
+
+  const { knownPriceTokens, unknownPriceTokens } = useMemo(() => {
+    const known = displayTokens.filter(t => t.priceSource !== 'unknown');
+    const unknown = displayTokens.filter(t => t.priceSource === 'unknown');
+    return { knownPriceTokens: known, unknownPriceTokens: unknown };
+  }, [displayTokens]);
 
   const totalSelectedValue = useMemo(() => {
     const outputTokenAddr = outputToken === 'USDC' ? config.usdc : config.weth;
@@ -2639,7 +2428,6 @@ export default function TokenSweeperPage() {
       }, 0);
   }, [tokens, selectedTokens, customAmounts, outputToken, config]);
 
-  // Count only non-output tokens that are selected
   const selectedCount = useMemo(() => {
     const outputTokenAddr = outputToken === 'USDC' ? config.usdc : config.weth;
     return [...selectedTokens].filter(addr => addr.toLowerCase() !== outputTokenAddr.toLowerCase()).length;
@@ -2660,7 +2448,6 @@ export default function TokenSweeperPage() {
             animate={{ opacity: 1, scale: 1 }}
             className="bg-slate-800 border border-slate-700 rounded-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden shadow-2xl"
           >
-            {/* Modal Header */}
             <div className="p-6 border-b border-slate-700 bg-gradient-to-r from-amber-500/10 to-orange-500/10">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -2685,7 +2472,6 @@ export default function TokenSweeperPage() {
                 </button>
               </div>
               
-              {/* Summary Stats */}
               <div className="grid grid-cols-3 gap-4 mt-4">
                 <div className="bg-slate-900/50 rounded-lg p-3">
                   <p className="text-xs text-slate-400">Input Value</p>
@@ -2707,7 +2493,6 @@ export default function TokenSweeperPage() {
                   <p className="text-xs text-slate-400">Price Impact</p>
                   {(() => {
                     const selectedQuotes = quotePreviewData.quotes.filter((q: QuotePreviewItem) => q.selected);
-                    // Weighted average price impact
                     const totalInput = selectedQuotes.reduce((sum: number, q: QuotePreviewItem) => sum + q.inputValueUsd, 0);
                     const weightedImpact = totalInput > 0 
                       ? selectedQuotes.reduce((sum: number, q: QuotePreviewItem) => sum + (q.lossPercent * q.inputValueUsd), 0) / totalInput
@@ -2722,7 +2507,6 @@ export default function TokenSweeperPage() {
               </div>
             </div>
             
-            {/* Token List */}
             <div className="overflow-y-auto max-h-[400px] p-4">
               <table className="w-full">
                 <thead className="text-xs text-slate-400 uppercase tracking-wider">
@@ -2775,7 +2559,6 @@ export default function TokenSweeperPage() {
                           }`}>
                             {quoteData.lossPercent > 0.01 ? `-${quoteData.lossPercent.toFixed(2)}%` : '~0%'}
                           </span>
-                          {/* Show Force toggle for high-impact tokens (>5%) */}
                           {quoteData.lossPercent > 5 && quoteData.selected && (
                             <button
                               onClick={() => toggleForceSlippage(quoteData.token.address)}
@@ -2796,7 +2579,6 @@ export default function TokenSweeperPage() {
                     </tr>
                   ))}
                   
-                  {/* Failed quotes */}
                   {quotePreviewData.failedQuotes.map((fq: FailedQuoteItem, idx: number) => (
                     <tr key={`failed-${idx}`} className="opacity-50">
                       <td className="py-3 pl-2">
@@ -2832,28 +2614,25 @@ export default function TokenSweeperPage() {
               )}
             </div>
             
-            {/* Warning for high price impact */}
             {quotePreviewData.quotes.some((q: QuotePreviewItem) => q.selected && q.lossPercent > 5) && (
               <div className="mx-4 mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
                 <div className="flex items-center gap-2 text-red-400">
                   <AlertTriangle className="w-4 h-4" />
                   <span className="text-sm font-medium">
                     {quotePreviewData.quotes.some((q: QuotePreviewItem) => q.selected && q.lossPercent > 5 && !q.forceHighSlippage) 
-                      ? <>High-impact tokens ({quotePreviewData.quotes.filter((q: QuotePreviewItem) => q.selected && q.lossPercent > 5 && !q.forceHighSlippage).length}) require "Force" to swap. Click the Force button or they will be skipped.</>
+                      ? <>High-impact tokens ({quotePreviewData.quotes.filter((q: QuotePreviewItem) => q.selected && q.lossPercent > 5 && !q.forceHighSlippage).length}) require "Force" to swap.</>
                       : <>Some tokens have &gt;5% price impact.</>
                     }
                   </span>
                 </div>
                 {quotePreviewData.quotes.some((q: QuotePreviewItem) => q.selected && q.forceHighSlippage) && (
                   <div className="mt-2 text-xs text-orange-400">
-                    ⚠️ Force enabled for {quotePreviewData.quotes.filter((q: QuotePreviewItem) => q.selected && q.forceHighSlippage).length} token(s) — 
-                    these will execute with higher slippage tolerance (~{Math.max(...quotePreviewData.quotes.filter((q: QuotePreviewItem) => q.selected && q.forceHighSlippage).map((q: QuotePreviewItem) => Math.ceil(q.lossPercent + 10)))}%).
+                    ⚠️ Force enabled for {quotePreviewData.quotes.filter((q: QuotePreviewItem) => q.selected && q.forceHighSlippage).length} token(s)
                   </div>
                 )}
               </div>
             )}
             
-            {/* Modal Footer */}
             <div className="p-4 border-t border-slate-700 bg-slate-900/50 flex gap-3">
               <button
                 onClick={() => {
@@ -2890,7 +2669,6 @@ export default function TokenSweeperPage() {
             animate={{ opacity: 1, scale: 1 }}
             className="bg-slate-800 border border-slate-700 rounded-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden shadow-2xl"
           >
-            {/* Modal Header */}
             <div className="p-6 border-b border-slate-700 bg-gradient-to-r from-emerald-500/10 to-teal-500/10">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -2912,7 +2690,6 @@ export default function TokenSweeperPage() {
                 </button>
               </div>
               
-              {/* Summary Stats */}
               <div className="grid grid-cols-3 gap-4 mt-4">
                 <div className="bg-slate-900/50 rounded-lg p-3">
                   <p className="text-xs text-slate-400">Total Input Value</p>
@@ -2934,16 +2711,7 @@ export default function TokenSweeperPage() {
                     const successfulResults = detailedResults.filter((r: SwapResultDetail) => r.status === 'success');
                     const totalInput = successfulResults.reduce((sum: number, r: SwapResultDetail) => sum + r.inputValueUsd, 0);
                     const totalReceived = swapResults?.totalValue || 0;
-                    // Positive = gain (received more than input), Negative = loss
                     const impactPercent = totalInput > 0 ? ((totalReceived - totalInput) / totalInput) * 100 : 0;
-                    
-                    // Debug logging
-                    console.log('📊 Price impact calculation:', {
-                      totalInput: totalInput.toFixed(2),
-                      totalReceived: totalReceived.toFixed(2),
-                      difference: (totalReceived - totalInput).toFixed(2),
-                      impactPercent: impactPercent.toFixed(4)
-                    });
                     
                     return (
                       <p className={`text-lg font-bold ${
@@ -2962,7 +2730,6 @@ export default function TokenSweeperPage() {
                 </div>
               </div>
               
-              {/* Transaction Link */}
               {txHash && (
                 <a
                   href={`${config.explorerUrl}/tx/${txHash}`}
@@ -2976,7 +2743,6 @@ export default function TokenSweeperPage() {
               )}
             </div>
             
-            {/* Token Results List */}
             <div className="overflow-y-auto max-h-[400px] p-4">
               <table className="w-full">
                 <thead className="text-xs text-slate-400 uppercase tracking-wider">
@@ -2989,7 +2755,6 @@ export default function TokenSweeperPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-700/50">
                   {detailedResults.map((result: SwapResultDetail, idx: number) => {
-                    // Calculate impact: positive = gain, negative = loss
                     const impactPercent = result.inputValueUsd > 0 
                       ? ((result.quotedOutputUsd - result.inputValueUsd) / result.inputValueUsd) * 100
                       : 0;
@@ -3056,7 +2821,6 @@ export default function TokenSweeperPage() {
               )}
             </div>
             
-            {/* Modal Footer */}
             <div className="p-4 border-t border-slate-700 bg-slate-900/50">
               <button
                 onClick={() => setShowResultsModal(false)}
@@ -3068,6 +2832,7 @@ export default function TokenSweeperPage() {
           </motion.div>
         </div>
       )}
+
       {/* Animated Background */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-emerald-500 rounded-full mix-blend-multiply filter blur-3xl opacity-10 animate-pulse" />
@@ -3162,7 +2927,6 @@ export default function TokenSweeperPage() {
               {/* Controls Bar */}
               <div className="p-4 border-b border-slate-700/50 bg-slate-900/30">
                 <div className="flex flex-wrap items-center gap-4">
-                  {/* Scan Button */}
                   <button
                     onClick={() => scanWalletTokens(false)}
                     disabled={isScanning || isProcessing}
@@ -3178,7 +2942,6 @@ export default function TokenSweeperPage() {
                     {isScanning ? 'Scanning...' : tokens.length > 0 ? 'Refresh' : 'Scan Wallet'}
                   </button>
 
-                  {/* Force Refresh Button - always visible, clears token/price caches */}
                   <button
                     onClick={() => scanWalletTokens(true)}
                     disabled={isScanning || isProcessing}
@@ -3189,27 +2952,21 @@ export default function TokenSweeperPage() {
                     Re-scan
                   </button>
 
-                  {/* Clear Runtime Spam Cache Button */}
                   {tokens.length > 0 && (
                     <button
                       onClick={() => {
-                        // Only clear runtime-detected spam (tokens that failed 0x quotes)
-                        // Do NOT clear the external GitHub spam list - that's authoritative
-                        clearFailedTokensCache(chainId);
-                        console.log('🗑️ Cleared runtime spam cache (GitHub list preserved)');
-                        // Trigger a re-scan
+                        clearUserHiddenTokens(chainId);
                         scanWalletTokens(true);
                       }}
                       disabled={isScanning || isProcessing}
                       className="flex items-center gap-2 px-3 py-2.5 bg-orange-600/20 hover:bg-orange-600/30 text-orange-300 border border-orange-500/30 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl text-sm font-medium transition"
-                      title="Clear locally-detected spam and re-scan (GitHub spam list preserved)"
+                      title="Show all hidden tokens"
                     >
                       <XCircle className="w-3.5 h-3.5" />
-                      Reset Spam
+                      Unhide All
                     </button>
                   )}
 
-                  {/* Output Token Selector */}
                   <div className="flex items-center gap-2 bg-slate-900/50 rounded-xl p-1">
                     <button
                       onClick={() => setOutputToken('USDC')}
@@ -3233,14 +2990,12 @@ export default function TokenSweeperPage() {
                     </button>
                   </div>
 
-                  {/* Chain Badge */}
                   <div className="ml-auto flex items-center gap-3">
-                    {/* Cache Stats (only show when tokens loaded) */}
                     {tokens.length > 0 && (
-                      <div className="text-xs text-slate-500" title="External (GitHub) + Runtime (local) spam tokens filtered">
+                      <div className="text-xs text-slate-500" title="External spam list + user hidden">
                         🚫 {(() => {
                           const stats = getCacheStats(chainId, address);
-                          return `${stats.externalSpam}+${stats.runtimeSpam} spam`;
+                          return `${stats.externalSpam} spam, ${stats.userHidden} hidden`;
                         })()}
                       </div>
                     )}
@@ -3261,56 +3016,12 @@ export default function TokenSweeperPage() {
                       placeholder="Add token by address (0x...)"
                       value={manualTokenInput}
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) => setManualTokenInput(e.target.value)}
-                      onKeyDown={async (e: React.KeyboardEvent<HTMLInputElement>) => {
-                        if (e.key === 'Enter' && manualTokenInput.match(/^0x[a-fA-F0-9]{40}$/) && publicClient && address) {
-                          const addr = manualTokenInput.toLowerCase() as Address;
-                          
-                          // Save to manual tokens list
-                          const newManual = new Set(manualTokens);
-                          newManual.add(addr);
-                          setManualTokens(newManual);
-                          saveManualTokens(newManual);
-                          setManualTokenInput('');
-                          console.log(`📌 Added manual token: ${addr}`);
-                          
-                          // Fetch this token's info directly (no full rescan needed)
-                          setIsAddingToken(true);
-                          try {
-                            const infos = await fetchTokenInfos([addr], address, publicClient);
-                            if (infos.length > 0 && infos[0].balance > 0n) {
-                              const newToken = infos[0];
-                              // Calculate formatted balance
-                              const balanceNum = Number(formatUnits(newToken.balance, newToken.decimals));
-                              newToken.balanceFormatted = formatNumber(balanceNum, 4);
-                              // Fetch price for this token (use USDC as output)
-                              const prices = await fetchMarketPrices([newToken], chainId, config.usdc as Address);
-                              newToken.price = prices[addr.toLowerCase()] || 0;
-                              newToken.valueUsd = balanceNum * newToken.price;
-                              
-                              // Add to tokens list (avoid duplicates)
-                              setTokens((prev: TokenInfo[]) => {
-                                const exists = prev.some((t: TokenInfo) => t.address.toLowerCase() === addr);
-                                if (exists) return prev;
-                                return [...prev, newToken].sort((a, b) => b.valueUsd - a.valueUsd);
-                              });
-                              console.log(`✅ Added ${newToken.symbol}: ${newToken.balanceFormatted} ($${newToken.valueUsd.toFixed(2)})`);
-                            } else {
-                              console.warn(`⚠️ Token ${addr.slice(0, 10)}... has no balance`);
-                            }
-                          } catch (err) {
-                            console.error('Failed to fetch token:', err);
-                          }
-                          setIsAddingToken(false);
-                        }
-                      }}
                       className="flex-1 bg-slate-800/50 text-sm text-white outline-none placeholder:text-slate-500 px-3 py-2 rounded-lg border border-slate-600/50 focus:border-emerald-500/50"
                     />
                     <button
                       onClick={async () => {
                         if (manualTokenInput.match(/^0x[a-fA-F0-9]{40}$/) && publicClient && address) {
                           const addr = manualTokenInput.toLowerCase() as Address;
-                          
-                          // Save to manual tokens list
                           const newManual = new Set(manualTokens);
                           newManual.add(addr);
                           setManualTokens(newManual);
@@ -3318,18 +3029,16 @@ export default function TokenSweeperPage() {
                           setManualTokenInput('');
                           console.log(`📌 Added manual token: ${addr}`);
                           
-                          // Fetch this token's info directly
                           setIsAddingToken(true);
                           try {
                             const infos = await fetchTokenInfos([addr], address, publicClient);
                             if (infos.length > 0 && infos[0].balance > 0n) {
                               const newToken = infos[0];
-                              // Calculate formatted balance
                               const balanceNum = Number(formatUnits(newToken.balance, newToken.decimals));
                               newToken.balanceFormatted = formatNumber(balanceNum, 4);
-                              // Fetch price (use USDC as output)
                               const prices = await fetchMarketPrices([newToken], chainId, config.usdc as Address);
-                              newToken.price = prices[addr.toLowerCase()] || 0;
+                              const priceData = prices[addr.toLowerCase()];
+                              newToken.price = priceData?.price || 0;
                               newToken.valueUsd = balanceNum * newToken.price;
                               
                               setTokens((prev: TokenInfo[]) => {
@@ -3354,7 +3063,6 @@ export default function TokenSweeperPage() {
                     </button>
                   </div>
                   
-                  {/* Show manual tokens count */}
                   {manualTokens.size > 0 && (
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-slate-400">
@@ -3375,7 +3083,6 @@ export default function TokenSweeperPage() {
                   )}
                 </div>
                 
-                {/* Manual tokens list (expandable) */}
                 {manualTokens.size > 0 && (
                   <div className="mt-2 flex flex-wrap gap-2">
                     {[...manualTokens].map((addr: string) => (
@@ -3420,31 +3127,33 @@ export default function TokenSweeperPage() {
 
                 {tokens.length > 0 && (
                   <>
-                    {/* Select All / None */}
-                    <div className="flex items-center justify-between mb-4">
-                      <span className="text-sm text-slate-400">
-                        {selectedCount} of {displayTokens.length} tokens selected
-                      </span>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => setSelectedTokens(new Set(displayTokens.map((t: TokenInfo) => t.address)))}
-                          className="text-xs text-emerald-400 hover:text-emerald-300"
-                        >
-                          Select All
-                        </button>
-                        <span className="text-slate-600">|</span>
-                        <button
-                          onClick={() => setSelectedTokens(new Set())}
-                          className="text-xs text-slate-400 hover:text-slate-300"
-                        >
-                          Clear
-                        </button>
-                      </div>
+                    {/* Select All / None - FIXED: removed extra closing div */}
+                    <div className="flex gap-2 mb-3">
+                      <button
+                        onClick={() => setSelectedTokens(new Set(displayTokens.map((t: TokenInfo) => t.address)))}
+                        className="text-xs text-emerald-400 hover:text-emerald-300"
+                      >
+                        Select All
+                      </button>
+                      <span className="text-slate-600">|</span>
+                      <button
+                        onClick={() => setSelectedTokens(new Set(knownPriceTokens.map((t: TokenInfo) => t.address)))}
+                        className="text-xs text-blue-400 hover:text-blue-300"
+                      >
+                        Known Only
+                      </button>
+                      <span className="text-slate-600">|</span>
+                      <button
+                        onClick={() => setSelectedTokens(new Set())}
+                        className="text-xs text-slate-400 hover:text-slate-300"
+                      >
+                        Clear
+                      </button>
                     </div>
 
-                    {/* Token Grid */}
+                    {/* Token Grid - Known Price Tokens */}
                     <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
-                      {displayTokens.map((token: TokenInfo) => {
+                      {knownPriceTokens.map((token: TokenInfo) => {
                         const isSelected = selectedTokens.has(token.address);
                         const customAmount = customAmounts[token.address] || '';
                         
@@ -3459,7 +3168,6 @@ export default function TokenSweeperPage() {
                             }`}
                           >
                             <div className="flex items-center gap-3">
-                              {/* Checkbox */}
                               <button
                                 onClick={() => {
                                   const next = new Set(selectedTokens);
@@ -3479,7 +3187,6 @@ export default function TokenSweeperPage() {
                                 {isSelected && <CheckCircle className="w-3.5 h-3.5 text-white" />}
                               </button>
 
-                              {/* Token Info */}
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2">
                                   <span className="font-medium text-white">{token.symbol}</span>
@@ -3490,7 +3197,6 @@ export default function TokenSweeperPage() {
                                 </div>
                               </div>
 
-                              {/* Value */}
                               <div className="text-right">
                                 <div className="text-emerald-400 font-medium">
                                   {formatUSD(token.valueUsd)}
@@ -3500,29 +3206,25 @@ export default function TokenSweeperPage() {
                                 </div>
                               </div>
                               
-                              {/* Mark as Spam button */}
                               <button
                                 onClick={(e: React.MouseEvent) => {
                                   e.stopPropagation();
-                                  markTokenAsFailed(chainId, token.address);
-                                  // Remove from tokens list
+                                  hideToken(chainId, token.address);
                                   setTokens((prev: TokenInfo[]) => prev.filter((t: TokenInfo) => t.address !== token.address));
-                                  // Remove from selection
                                   setSelectedTokens((prev: Set<string>) => {
                                     const next = new Set(prev);
                                     next.delete(token.address);
                                     return next;
                                   });
-                                  console.log(`🚫 Marked ${token.symbol} as spam`);
+                                  console.log(`🚫 Hid ${token.symbol}`);
                                 }}
                                 className="ml-2 p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition"
-                                title="Mark as spam (hide this token)"
+                                title="Hide this token"
                               >
                                 <XCircle className="w-4 h-4" />
                               </button>
                             </div>
 
-                            {/* Custom Amount Input */}
                             {isSelected && (
                               <div className="mt-3 flex items-center gap-2 bg-black/20 rounded-lg px-3 py-2 border border-slate-700">
                                 <input
@@ -3555,6 +3257,95 @@ export default function TokenSweeperPage() {
                         );
                       })}
                     </div>
+
+                    {/* Unknown Price Tokens Section */}
+                    {unknownPriceTokens.length > 0 && (
+                      <div className="mt-4 border-t border-slate-700/50 pt-4">
+                        <button
+                          onClick={() => setShowUnknownPriceTokens(!showUnknownPriceTokens)}
+                          className="flex items-center gap-2 text-sm text-yellow-400 hover:text-yellow-300 mb-2"
+                        >
+                          {showUnknownPriceTokens ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                          <HelpCircle className="w-4 h-4" />
+                          {unknownPriceTokens.length} tokens with unknown price
+                        </button>
+                        
+                        {showUnknownPriceTokens && (
+                          <div className="space-y-2">
+                            {unknownPriceTokens.map((token: TokenInfo) => {
+                              const isSelected = selectedTokens.has(token.address);
+                              
+                              return (
+                                <div
+                                  key={token.address}
+                                  className={`p-3 rounded-xl border transition ${
+                                    isSelected 
+                                      ? 'bg-yellow-900/20 border-yellow-500/50' 
+                                      : 'bg-slate-800/30 border-transparent opacity-60'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <button
+                                      onClick={() => {
+                                        const next = new Set(selectedTokens);
+                                        if (next.has(token.address)) {
+                                          next.delete(token.address);
+                                        } else {
+                                          next.add(token.address);
+                                        }
+                                        setSelectedTokens(next);
+                                      }}
+                                      className={`w-5 h-5 rounded flex items-center justify-center border transition ${
+                                        isSelected 
+                                          ? 'bg-yellow-500 border-yellow-500' 
+                                          : 'border-slate-600 hover:border-slate-500'
+                                      }`}
+                                    >
+                                      {isSelected && <CheckCircle className="w-3.5 h-3.5 text-white" />}
+                                    </button>
+                                    
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-medium text-white">{token.symbol}</span>
+                                        <span className="text-xs text-slate-500">{shortenAddress(token.address)}</span>
+                                        <span className="text-xs text-yellow-500 bg-yellow-500/10 px-1.5 py-0.5 rounded">No price</span>
+                                      </div>
+                                      <div className="text-sm text-slate-400">
+                                        Balance: {token.balanceFormatted}
+                                      </div>
+                                    </div>
+                                    
+                                    <div className="text-right">
+                                      <div className="text-yellow-400 font-medium flex items-center gap-1">
+                                        <HelpCircle className="w-3 h-3" />
+                                        ???
+                                      </div>
+                                    </div>
+                                    
+                                    <button
+                                      onClick={(e: React.MouseEvent) => {
+                                        e.stopPropagation();
+                                        hideToken(chainId, token.address);
+                                        setTokens((prev: TokenInfo[]) => prev.filter((t: TokenInfo) => t.address !== token.address));
+                                        setSelectedTokens((prev: Set<string>) => {
+                                          const next = new Set(prev);
+                                          next.delete(token.address);
+                                          return next;
+                                        });
+                                      }}
+                                      className="ml-2 p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition"
+                                      title="Hide this token"
+                                    >
+                                      <XCircle className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </>
                 )}
               </div>
@@ -3562,7 +3353,6 @@ export default function TokenSweeperPage() {
               {/* Action Footer */}
               {tokens.length > 0 && (
                 <div className="p-4 border-t border-slate-700/50 bg-slate-900/30">
-                  {/* Summary */}
                   <div className="flex items-center justify-between mb-4">
                     <div>
                       <span className="text-sm text-slate-400">Total Value:</span>
@@ -3575,7 +3365,6 @@ export default function TokenSweeperPage() {
                     </div>
                   </div>
 
-                  {/* Execute Button */}
                   <button
                     onClick={fetchQuotesAndShowPreview}
                     disabled={isProcessing || selectedCount === 0}
