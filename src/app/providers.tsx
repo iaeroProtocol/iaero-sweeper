@@ -5,37 +5,36 @@ import { mainnet, base, arbitrum, optimism, polygon, bsc, avalanche, scroll, lin
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RainbowKitProvider, getDefaultConfig, darkTheme } from '@rainbow-me/rainbowkit';
 
+const alchemyKey = process.env.NEXT_PUBLIC_ALCHEMY_KEY;
+
 const config = getDefaultConfig({
   appName: 'Token Sweeper',
   projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'demo',
   chains: [base, mainnet, arbitrum, optimism, polygon, bsc, avalanche, scroll, linea],
   transports: {
     [base.id]: http(
-      process.env.NEXT_PUBLIC_BASE_RPC_URL || 'https://mainnet.base.org'
+      alchemyKey ? `https://base-mainnet.g.alchemy.com/v2/${alchemyKey}` : 'https://mainnet.base.org'
     ),
     [mainnet.id]: http(
-      process.env.NEXT_PUBLIC_ETH_RPC_URL || 'https://eth.llamarpc.com'
+      alchemyKey ? `https://eth-mainnet.g.alchemy.com/v2/${alchemyKey}` : 'https://eth.llamarpc.com'
     ),
     [arbitrum.id]: http(
-      process.env.NEXT_PUBLIC_ARB_RPC_URL || 'https://arb1.arbitrum.io/rpc'
+      alchemyKey ? `https://arb-mainnet.g.alchemy.com/v2/${alchemyKey}` : 'https://arb1.arbitrum.io/rpc'
     ),
     [optimism.id]: http(
-      process.env.NEXT_PUBLIC_OP_RPC_URL || 'https://mainnet.optimism.io'
+      alchemyKey ? `https://opt-mainnet.g.alchemy.com/v2/${alchemyKey}` : 'https://mainnet.optimism.io'
     ),
     [polygon.id]: http(
-      process.env.NEXT_PUBLIC_POLYGON_RPC_URL || 'https://polygon-rpc.com'
+      alchemyKey ? `https://polygon-mainnet.g.alchemy.com/v2/${alchemyKey}` : 'https://polygon-rpc.com'
     ),
-    [bsc.id]: http(
-      process.env.NEXT_PUBLIC_BSC_RPC_URL || 'https://bsc-dataseed.binance.org'
-    ),
-    [avalanche.id]: http(
-      process.env.NEXT_PUBLIC_AVAX_RPC_URL || 'https://api.avax.network/ext/bc/C/rpc'
-    ),
+    // Alchemy doesn't support these well - use public RPCs
+    [bsc.id]: http('https://bsc-dataseed.binance.org'),
+    [avalanche.id]: http('https://api.avax.network/ext/bc/C/rpc'),
     [scroll.id]: http(
-      process.env.NEXT_PUBLIC_SCROLL_RPC_URL || 'https://rpc.scroll.io'
+      alchemyKey ? `https://scroll-mainnet.g.alchemy.com/v2/${alchemyKey}` : 'https://rpc.scroll.io'
     ),
     [linea.id]: http(
-      process.env.NEXT_PUBLIC_LINEA_RPC_URL || 'https://rpc.linea.build'
+      alchemyKey ? `https://linea-mainnet.g.alchemy.com/v2/${alchemyKey}` : 'https://rpc.linea.build'
     ),
   },
   ssr: true,
@@ -49,7 +48,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <QueryClientProvider client={queryClient}>
         <RainbowKitProvider
           theme={darkTheme({
-            accentColor: '#10b981', // emerald-500
+            accentColor: '#10b981',
             accentColorForeground: 'white',
             borderRadius: 'large',
             fontStack: 'system',
