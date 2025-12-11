@@ -1270,8 +1270,8 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
     
     const tokensNeedingFallback: Array<{ address: Address; decimals: number; balance: bigint; symbol: string }> = [];
     
-    const BATCH_SIZE = 5;
-    const BATCH_DELAY = 1500;
+    const BATCH_SIZE = 10;
+    const BATCH_DELAY = 500;
     const totalBatches = Math.ceil(tokens.length / BATCH_SIZE);
     
     for (let i = 0; i < tokens.length; i += BATCH_SIZE) {
@@ -1715,8 +1715,8 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
       const successfulQuotes: QuotePreviewItem[] = [];
       const failedQuotes: FailedQuoteItem[] = [];
       
-      const QUOTE_BATCH_SIZE = 5;
-      const QUOTE_BATCH_DELAY = 1500;
+      const QUOTE_BATCH_SIZE = 10;
+      const QUOTE_BATCH_DELAY = 500;
       
       console.log(`📊 Fetching quotes for ${tokensToSwap.length} tokens (batches of ${QUOTE_BATCH_SIZE})...`);
       
@@ -2020,7 +2020,7 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
         setProgressStep('Refreshing quotes...');
         console.log(`🔄 Re-fetching ${quotesToExecute.length} quotes (${approvalsNeeded} approvals caused delay)...`);
         
-        const REQUOTE_BATCH_SIZE = 5;
+        const REQUOTE_BATCH_SIZE = 10;
         const freshQuotes: typeof executableQuotes = [];
         
         for (let batchStart = 0; batchStart < quotesToExecute.length; batchStart += REQUOTE_BATCH_SIZE) {
@@ -2103,7 +2103,7 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
         console.log('✅ No approvals needed - using original quotes');
       }
 
-      const EXECUTION_BATCH_SIZE = 5;
+      const EXECUTION_BATCH_SIZE = 10;
       const totalBatches = Math.ceil(quotesToExecute.length / EXECUTION_BATCH_SIZE);
       
       console.log(`🚀 Executing ${quotesToExecute.length} swaps in ${totalBatches} batch(es) of up to ${EXECUTION_BATCH_SIZE}...`);
