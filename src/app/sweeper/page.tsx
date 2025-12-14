@@ -2868,16 +2868,33 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
       <header className="relative z-10 border-b border-slate-800/50 backdrop-blur-xl bg-slate-900/50">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
-                <Zap className="w-6 h-6 text-white" />
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
+                  <Zap className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold text-white">Token Sweeper</h1>
+                  <p className="text-xs text-slate-400">Batch swap to USDC or WETH</p>
+                </div>
               </div>
-              <div>
-                <h1 className="text-xl font-bold text-white">Token Sweeper</h1>
-                <p className="text-xs text-slate-400">Batch swap to USDC or WETH</p>
+              <div className="hidden sm:flex items-center gap-1 bg-slate-800/50 rounded-xl p-1 border border-slate-700/50">
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-blue-600 text-white shadow-lg">
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 1.75l-6.25 10.5L12 16l6.25-3.75L12 1.75zM5.75 13.5L12 22.25l6.25-8.75L12 17.25 5.75 13.5z"/>
+                  </svg>
+                  <span>EVM</span>
+                </div>
+                <a href="/solana" className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-700/50 transition-all">
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M17.85 12.77a.62.62 0 00-.44-.18H5.73a.31.31 0 00-.22.53l2.22 2.22c.12.12.28.18.44.18h11.68a.31.31 0 00.22-.53l-2.22-2.22z"/>
+                    <path d="M8.15 8.47a.62.62 0 00.44.18h11.68a.31.31 0 00.22-.53l-2.22-2.22a.62.62 0 00-.44-.18H6.15a.31.31 0 00-.22.53l2.22 2.22z"/>
+                    <path d="M17.85 17.08a.62.62 0 00-.44-.18H5.73a.31.31 0 00-.22.53l2.22 2.22c.12.12.28.18.44.18h11.68a.31.31 0 00.22-.53l-2.22-2.22z"/>
+                  </svg>
+                  <span>Solana</span>
+                </a>
               </div>
             </div>
-            
             <ConnectButton />
           </div>
         </div>
