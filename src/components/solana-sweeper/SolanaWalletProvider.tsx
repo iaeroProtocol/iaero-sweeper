@@ -23,7 +23,7 @@
 import React, { useMemo } from 'react';
 import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
-import type { Adapter } from '@solana/wallet-adapter-base';
+import { WalletAdapterNetwork, type Adapter } from '@solana/wallet-adapter-base';
 import {
   PhantomWalletAdapter,
   SolflareWalletAdapter,
@@ -32,7 +32,7 @@ import {
   CoinbaseWalletAdapter,
   WalletConnectWalletAdapter,
 } from '@solana/wallet-adapter-wallets';
-import { clusterApiUrl, type Cluster } from '@solana/web3.js';
+import { clusterApiUrl } from '@solana/web3.js';
 
 // Default styles for wallet modal
 import '@solana/wallet-adapter-react-ui/styles.css';
@@ -52,7 +52,7 @@ const RPC_ENDPOINT = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl('ma
 const WALLETCONNECT_PROJECT_ID = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || '';
 
 // Network for WalletConnect
-const NETWORK: Cluster = 'mainnet-beta';
+const NETWORK = WalletAdapterNetwork.Mainnet;
 
 // ============================================================================
 // PROVIDER COMPONENT
