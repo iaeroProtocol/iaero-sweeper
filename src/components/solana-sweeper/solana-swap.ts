@@ -925,18 +925,24 @@ function deserializeInstruction(instruction: any): TransactionInstruction {
 }
 
 // ============================================================================
-// BATCH EXECUTION
+// MINI-BATCH EXECUTION (replace the existing executeBatchSwap function)
+// ============================================================================
+// Process in batches of 2-3 to keep blockhashes fresh
+// Each mini-batch: Build → Sign → Send → Confirm
 // ============================================================================
 
+const MINI_BATCH_SIZE = 3; // Process 3 swaps at a time
+
 /**
- * Execute multiple swaps with parallel transaction execution
+ * Execute multiple swaps with mini-batch processing
  * 
  * Flow:
- * 1. Get quotes for all tokens
- * 2. Get complete swap transactions from Jupiter
- * 3. Sign all transactions (batch if wallet supports it)
- * 4. Send all transactions in parallel
- * 5. Confirm all transactions in parallel
+ * 1. Get quotes for all tokens (quotes don't expire quickly)
+ * 2. Process in mini-batches of 2-3:
+ *    - Build transactions (fresh blockhash)
+ *    - Sign batch (one approval per mini-batch)
+ *    - Send batch in parallel
+ *    - Confirm batch
  */
 export async function executeBatchSwap(
   tokens: SolanaTokenInfo[],
@@ -954,12 +960,12 @@ export async function executeBatchSwap(
   totalOutputAmount: bigint;
 }> {
   console.log(`\n${'═'.repeat(60)}`);
-  console.log(`🚀 SOLANA PARALLEL SWAP`);
+  console.log(`🚀 SOLANA MINI-BATCH SWAP`);
   console.log(`${'═'.repeat(60)}`);
   console.log(`Tokens: ${tokens.length}`);
   console.log(`Output: ${outputMint.slice(0, 8)}...`);
   console.log(`Slippage: ${slippageBps} bps`);
-  console.log(`Batch signing: ${signAllTransactions ? 'Yes' : 'No (sequential)'}`);
+  console.log(`Mini-batch size: ${MINI_BATCH_SIZE}`);
   
   const successful: SwapResult[] = [];
   const failed: SwapResult[] = [];
@@ -974,9 +980,9 @@ export async function executeBatchSwap(
   }
   
   // ─────────────────────────────────────────────────────────────────────────
-  // STEP 1: GET QUOTES
+  // STEP 1: GET ALL QUOTES (these don't expire quickly)
   // ─────────────────────────────────────────────────────────────────────────
-  console.log(`\n📊 STEP 1: Fetching quotes...`);
+  console.log(`\n📊 STEP 1: Fetching all quotes...`);
   onProgress?.('Fetching quotes...');
   
   const quotes = await getJupiterQuotesBatched(
@@ -1007,207 +1013,216 @@ export async function executeBatchSwap(
   }
   
   // ─────────────────────────────────────────────────────────────────────────
-  // STEP 2: BUILD ALL TRANSACTIONS (using /swap endpoint)
+  // STEP 2: PROCESS IN MINI-BATCHES
   // ─────────────────────────────────────────────────────────────────────────
-  console.log(`\n🔧 STEP 2: Building ${quotedTokens.length} swap transactions...`);
-  onProgress?.('Building transactions...');
+  const totalBatches = Math.ceil(quotedTokens.length / MINI_BATCH_SIZE);
+  console.log(`\n🔄 Processing ${quotedTokens.length} swaps in ${totalBatches} mini-batches...`);
   
-  const pendingSwaps: Array<{
-    token: SolanaTokenInfo;
-    quote: JupiterQuote;
-    transaction: VersionedTransaction;
-    priceImpactPct: number;
-  }> = [];
-  
-  for (const token of quotedTokens) {
-    const quote = quotes.get(token.mint)!;
-    const priceImpactPct = parseFloat(quote.priceImpactPct || '0');
+  for (let batchIdx = 0; batchIdx < totalBatches; batchIdx++) {
+    const batchStart = batchIdx * MINI_BATCH_SIZE;
+    const batchEnd = Math.min(batchStart + MINI_BATCH_SIZE, quotedTokens.length);
+    const batchTokens = quotedTokens.slice(batchStart, batchEnd);
     
-    try {
-      // Get complete transaction from Jupiter's /swap endpoint
-      // Dynamic slippage is calculated inside based on price impact
-      const swapTxBase64 = await getJupiterSwapTransaction(quote, wallet.toString());
+    console.log(`\n${'─'.repeat(40)}`);
+    console.log(`📦 BATCH ${batchIdx + 1}/${totalBatches}: ${batchTokens.map(t => t.symbol).join(', ')}`);
+    console.log(`${'─'.repeat(40)}`);
+    onProgress?.(`Batch ${batchIdx + 1}/${totalBatches}: ${batchTokens.map(t => t.symbol).join(', ')}`);
+    
+    // ─────────────────────────────────────────────────────────────────────
+    // 2a: BUILD TRANSACTIONS FOR THIS BATCH (fresh blockhash)
+    // ─────────────────────────────────────────────────────────────────────
+    console.log(`  🔧 Building ${batchTokens.length} transactions...`);
+    
+    const pendingSwaps: Array<{
+      token: SolanaTokenInfo;
+      quote: JupiterQuote;
+      transaction: VersionedTransaction;
+    }> = [];
+    
+    for (const token of batchTokens) {
+      const quote = quotes.get(token.mint)!;
       
-      if (!swapTxBase64) {
-        console.log(`  ❌ ${token.symbol}: Failed to get transaction`);
+      try {
+        const swapTxBase64 = await getJupiterSwapTransaction(quote, wallet.toString());
+        
+        if (!swapTxBase64) {
+          console.log(`    ❌ ${token.symbol}: Failed to get transaction`);
+          failed.push({
+            mint: token.mint,
+            symbol: token.symbol,
+            status: 'failed',
+            error: 'Failed to get swap transaction',
+            inputAmount: token.balance,
+          });
+          continue;
+        }
+        
+        const swapTxBuffer = Buffer.from(swapTxBase64, 'base64');
+        const transaction = VersionedTransaction.deserialize(swapTxBuffer);
+        
+        pendingSwaps.push({ token, quote, transaction });
+        console.log(`    ✅ ${token.symbol}: Ready`);
+        
+      } catch (err: any) {
+        console.log(`    ❌ ${token.symbol}: ${err.message}`);
         failed.push({
           mint: token.mint,
           symbol: token.symbol,
           status: 'failed',
-          error: 'Failed to get swap transaction',
+          error: err.message,
           inputAmount: token.balance,
         });
-        continue;
       }
       
-      // Deserialize the transaction
-      const swapTxBuffer = Buffer.from(swapTxBase64, 'base64');
-      const transaction = VersionedTransaction.deserialize(swapTxBuffer);
-      
-      pendingSwaps.push({ token, quote, transaction, priceImpactPct });
-      console.log(`  ✅ ${token.symbol}: Transaction ready (impact: ${priceImpactPct.toFixed(2)}%)`);
-      
-    } catch (err: any) {
-      console.log(`  ❌ ${token.symbol}: ${err.message}`);
-      failed.push({
-        mint: token.mint,
-        symbol: token.symbol,
-        status: 'failed',
-        error: err.message,
-        inputAmount: token.balance,
-      });
+      // Small delay between tx builds
+      await new Promise(r => setTimeout(r, 50));
     }
     
-    // Small delay to avoid rate limiting
-    await new Promise(r => setTimeout(r, 100));
-  }
-  
-  if (pendingSwaps.length === 0) {
-    console.log('❌ No transactions to execute');
-    return { successful, failed, totalOutputAmount };
-  }
-  
-  // ─────────────────────────────────────────────────────────────────────────
-  // STEP 3: SIGN ALL TRANSACTIONS AT ONCE
-  // ─────────────────────────────────────────────────────────────────────────
-  console.log(`\n✍️ STEP 3: Signing ${pendingSwaps.length} transactions...`);
-  onProgress?.(`Requesting signature for ${pendingSwaps.length} swaps...`);
-  
-  let signedTransactions: VersionedTransaction[];
-  try {
-    const transactions = pendingSwaps.map(s => s.transaction);
-    
-    // Use signAllTransactions if provided (one approval for all txs)
-    if (signAllTransactions) {
-      console.log('  📦 Using batch signing (one approval)...');
-      signedTransactions = await signAllTransactions(transactions);
-    } else {
-      // Sign one by one (more clicks but always works)
-      console.log('  ⚠️ Signing individually (multiple approvals)...');
-      signedTransactions = [];
-      for (let i = 0; i < transactions.length; i++) {
-        console.log(`    Signing ${i + 1}/${transactions.length}: ${pendingSwaps[i].token.symbol}`);
-        signedTransactions.push(await signTransaction(transactions[i]));
-      }
+    if (pendingSwaps.length === 0) {
+      console.log(`  ⚠️ No transactions in batch ${batchIdx + 1}`);
+      continue;
     }
-    console.log(`  ✅ All ${signedTransactions.length} transactions signed`);
-  } catch (err: any) {
-    console.error('❌ Signing failed:', err.message);
-    // Mark all as failed
-    for (const { token } of pendingSwaps) {
-      failed.push({
-        mint: token.mint,
-        symbol: token.symbol,
-        status: 'failed',
-        error: 'User rejected or signing failed',
-        inputAmount: token.balance,
-      });
-    }
-    return { successful, failed, totalOutputAmount };
-  }
-  
-  // ─────────────────────────────────────────────────────────────────────────
-  // STEP 4: SEND ALL TRANSACTIONS IN PARALLEL
-  // ─────────────────────────────────────────────────────────────────────────
-  console.log(`\n🚀 STEP 4: Sending ${signedTransactions.length} transactions in parallel...`);
-  onProgress?.('Sending transactions...');
-  
-  const sendPromises = signedTransactions.map(async (signedTx, idx) => {
-    const { token, quote } = pendingSwaps[idx];
     
+    // ─────────────────────────────────────────────────────────────────────
+    // 2b: SIGN THIS BATCH
+    // ─────────────────────────────────────────────────────────────────────
+    console.log(`  ✍️ Signing ${pendingSwaps.length} transactions...`);
+    onProgress?.(`Signing batch ${batchIdx + 1}...`);
+    
+    let signedTransactions: VersionedTransaction[];
     try {
-      const signature = await connection.sendRawTransaction(signedTx.serialize(), {
-        skipPreflight: false,
-        preflightCommitment: 'confirmed',
-        maxRetries: 3,
+      const transactions = pendingSwaps.map(s => s.transaction);
+      
+      if (signAllTransactions && pendingSwaps.length > 1) {
+        signedTransactions = await signAllTransactions(transactions);
+      } else {
+        signedTransactions = [];
+        for (const tx of transactions) {
+          signedTransactions.push(await signTransaction(tx));
+        }
+      }
+      console.log(`    ✅ Signed ${signedTransactions.length} transactions`);
+    } catch (err: any) {
+      console.error(`  ❌ Signing failed:`, err.message);
+      for (const { token } of pendingSwaps) {
+        failed.push({
+          mint: token.mint,
+          symbol: token.symbol,
+          status: 'failed',
+          error: 'User rejected or signing failed',
+          inputAmount: token.balance,
+        });
+      }
+      continue; // Move to next batch
+    }
+    
+    // ─────────────────────────────────────────────────────────────────────
+    // 2c: SEND THIS BATCH IN PARALLEL
+    // ─────────────────────────────────────────────────────────────────────
+    console.log(`  🚀 Sending ${signedTransactions.length} transactions...`);
+    onProgress?.(`Sending batch ${batchIdx + 1}...`);
+    
+    const sendPromises = signedTransactions.map(async (signedTx, idx) => {
+      const { token, quote } = pendingSwaps[idx];
+      
+      try {
+        const signature = await connection.sendRawTransaction(signedTx.serialize(), {
+          skipPreflight: true, // Skip to reduce latency
+          maxRetries: 3,
+        });
+        
+        console.log(`    📤 ${token.symbol}: ${signature.slice(0, 16)}...`);
+        return { token, quote, signature, error: null };
+      } catch (err: any) {
+        console.log(`    ❌ ${token.symbol}: ${err.message.slice(0, 40)}`);
+        return { token, quote, signature: null, error: err.message };
+      }
+    });
+    
+    const sendResults = await Promise.all(sendPromises);
+    
+    // ─────────────────────────────────────────────────────────────────────
+    // 2d: CONFIRM THIS BATCH
+    // ─────────────────────────────────────────────────────────────────────
+    const sentTxs = sendResults.filter(r => r.signature !== null);
+    
+    if (sentTxs.length > 0) {
+      console.log(`  ⏳ Confirming ${sentTxs.length} transactions...`);
+      onProgress?.(`Confirming batch ${batchIdx + 1}...`);
+      
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+      
+      const confirmPromises = sentTxs.map(async ({ token, quote, signature }) => {
+        try {
+          const confirmation = await connection.confirmTransaction({
+            signature: signature!,
+            blockhash,
+            lastValidBlockHeight,
+          }, 'confirmed');
+          
+          if (confirmation.value.err) {
+            return { token, quote, signature, success: false, error: JSON.stringify(confirmation.value.err) };
+          }
+          
+          console.log(`    ✅ ${token.symbol}: Confirmed!`);
+          return { token, quote, signature, success: true, error: null };
+          
+        } catch (err: any) {
+          console.log(`    ❌ ${token.symbol}: Confirmation failed`);
+          return { token, quote, signature, success: false, error: err.message };
+        }
       });
       
-      console.log(`  📤 ${token.symbol}: Sent ${signature.slice(0, 16)}...`);
+      const confirmResults = await Promise.all(confirmPromises);
       
-      return { token, quote, signature, error: null };
-    } catch (err: any) {
-      console.log(`  ❌ ${token.symbol}: Send failed - ${err.message.slice(0, 40)}`);
-      return { token, quote, signature: null, error: err.message };
-    }
-  });
-  
-  const sendResults = await Promise.all(sendPromises);
-  
-  // ─────────────────────────────────────────────────────────────────────────
-  // STEP 5: CONFIRM ALL TRANSACTIONS IN PARALLEL
-  // ─────────────────────────────────────────────────────────────────────────
-  const sentTxs = sendResults.filter(r => r.signature !== null);
-  
-  if (sentTxs.length > 0) {
-    console.log(`\n⏳ STEP 5: Confirming ${sentTxs.length} transactions...`);
-    onProgress?.('Confirming transactions...');
-    
-    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
-    
-    const confirmPromises = sentTxs.map(async ({ token, quote, signature }) => {
-      try {
-        const confirmation = await connection.confirmTransaction({
-          signature: signature!,
-          blockhash,
-          lastValidBlockHeight,
-        }, 'confirmed');
-        
-        if (confirmation.value.err) {
-          return { token, quote, signature, success: false, error: JSON.stringify(confirmation.value.err) };
+      // Process results
+      for (const result of confirmResults) {
+        if (result.success) {
+          const outputAmount = BigInt(result.quote.outAmount);
+          totalOutputAmount += outputAmount;
+          successful.push({
+            mint: result.token.mint,
+            symbol: result.token.symbol,
+            status: 'success',
+            signature: result.signature!,
+            inputAmount: result.token.balance,
+            outputAmount,
+          });
+        } else {
+          failed.push({
+            mint: result.token.mint,
+            symbol: result.token.symbol,
+            status: 'failed',
+            error: result.error || 'Transaction failed',
+            inputAmount: result.token.balance,
+          });
         }
-        
-        console.log(`  ✅ ${token.symbol}: Confirmed!`);
-        return { token, quote, signature, success: true, error: null };
-        
-      } catch (err: any) {
-        console.log(`  ❌ ${token.symbol}: Confirmation failed`);
-        return { token, quote, signature, success: false, error: err.message };
-      }
-    });
-    
-    const confirmResults = await Promise.all(confirmPromises);
-    
-    // Process results
-    for (const result of confirmResults) {
-      if (result.success) {
-        const outputAmount = BigInt(result.quote.outAmount);
-        totalOutputAmount += outputAmount;
-        successful.push({
-          mint: result.token.mint,
-          symbol: result.token.symbol,
-          status: 'success',
-          signature: result.signature!,
-          inputAmount: result.token.balance,
-          outputAmount,
-        });
-      } else {
-        failed.push({
-          mint: result.token.mint,
-          symbol: result.token.symbol,
-          status: 'failed',
-          error: result.error || 'Transaction failed',
-          inputAmount: result.token.balance,
-        });
       }
     }
-  }
-  
-  // Add send failures to failed list
-  for (const result of sendResults.filter(r => r.signature === null)) {
-    failed.push({
-      mint: result.token.mint,
-      symbol: result.token.symbol,
-      status: 'failed',
-      error: result.error || 'Send failed',
-      inputAmount: result.token.balance,
-    });
+    
+    // Add send failures to failed list
+    for (const result of sendResults.filter(r => r.signature === null)) {
+      failed.push({
+        mint: result.token.mint,
+        symbol: result.token.symbol,
+        status: 'failed',
+        error: result.error || 'Send failed',
+        inputAmount: result.token.balance,
+      });
+    }
+    
+    // Small delay between batches
+    if (batchIdx < totalBatches - 1) {
+      console.log(`  ⏸️ Waiting before next batch...`);
+      await new Promise(r => setTimeout(r, 500));
+    }
   }
   
   // ─────────────────────────────────────────────────────────────────────────
   // SUMMARY
   // ─────────────────────────────────────────────────────────────────────────
   console.log(`\n${'═'.repeat(60)}`);
-  console.log(`✅ BATCH SWAP COMPLETE`);
+  console.log(`✅ MINI-BATCH SWAP COMPLETE`);
   console.log(`   Successful: ${successful.length}`);
   console.log(`   Failed: ${failed.length}`);
   console.log(`   Total output: ${Number(totalOutputAmount) / (10 ** outputDecimals)}`);
