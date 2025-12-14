@@ -28,4 +28,4 @@ export type { UseSolanaSweeperReturn } from './useSolanaSweeper';
 
 // Components
 export { SolanaProvider, CombinedWeb3Provider } from './SolanaProvider';
-export { default as SolanaSweeperPage } from './SolanaSweeperPage';
+export { default as SolanaSweeper } from './SolanaSweeper';
