@@ -23,6 +23,7 @@
 import React, { useMemo } from 'react';
 import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
+import type { Adapter } from '@solana/wallet-adapter-base';
 import {
   PhantomWalletAdapter,
   SolflareWalletAdapter,
@@ -64,7 +65,7 @@ interface SolanaWalletProviderProps {
 export function SolanaWalletProvider({ children }: SolanaWalletProviderProps) {
   // Configure supported wallets
   const wallets = useMemo(() => {
-    const walletList = [
+    const walletList: Adapter[] = [
       new PhantomWalletAdapter(),
       new SolflareWalletAdapter(),
       new CoinbaseWalletAdapter(),

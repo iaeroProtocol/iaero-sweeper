@@ -203,6 +203,44 @@ export const SOLANA_TOKENS = {
   BONK: 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263',
 } as const;
 
+// ============================================================================
+// PLATFORM FEE CONFIGURATION
+// ============================================================================
+// Fee in basis points (5 = 0.05%)
+const PLATFORM_FEE_BPS = 5;
+
+// Your platform's fee wallet address
+// Set NEXT_PUBLIC_PLATFORM_FEE_WALLET in your .env.local or Cloudflare env vars
+const PLATFORM_FEE_WALLET = process.env.NEXT_PUBLIC_PLATFORM_FEE_WALLET || '';
+
+/**
+ * Derive the Associated Token Account (ATA) for a given wallet and mint
+ * This is where fees will be deposited
+ */
+function deriveFeeAccount(walletAddress: string, tokenMint: string): string | null {
+  if (!walletAddress || walletAddress.includes('YOUR_')) return null;
+  
+  try {
+    const { PublicKey } = require('@solana/web3.js');
+    const wallet = new PublicKey(walletAddress);
+    const mint = new PublicKey(tokenMint);
+    
+    // Derive ATA address (same algorithm as getAssociatedTokenAddress)
+    const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+    const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');
+    
+    const [ata] = PublicKey.findProgramAddressSync(
+      [wallet.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), mint.toBuffer()],
+      ASSOCIATED_TOKEN_PROGRAM_ID
+    );
+    
+    return ata.toString();
+  } catch (err) {
+    console.warn('Failed to derive fee account:', err);
+    return null;
+  }
+}
+
 // Jupiter API endpoints (Dec 2025)
 // lite-api.jup.ag - no platform fee (being deprecated Dec 31, 2025)
 // After Dec 31, 2025, switch to public.jupiterapi.com (0.2% fee)
@@ -604,6 +642,8 @@ export async function getJupiterQuote(
       slippageBps: slippageBps.toString(),
       // Use ExactIn mode (we specify input amount)
       swapMode: 'ExactIn',
+      // Platform fee (5 bps = 0.05%)
+      platformFeeBps: PLATFORM_FEE_BPS.toString(),
       // Only direct routes for reliability (can remove for better prices)
       // onlyDirectRoutes: 'true',
     });
@@ -780,18 +820,32 @@ export async function getJupiterSwapTransaction(
     // Use the /swap endpoint instead of /swap-instructions
     const swapUrl = JUPITER_SWAP_INSTRUCTIONS_API.replace('swap-instructions', 'swap');
     
+    // Derive the fee account for the output token
+    const outputMint = quote.outputMint;
+    const feeAccount = deriveFeeAccount(PLATFORM_FEE_WALLET, outputMint);
+    
+    const swapBody: Record<string, any> = {
+      quoteResponse: quote,
+      userPublicKey,
+      wrapAndUnwrapSol: true,
+      useSharedAccounts: true,
+      dynamicComputeUnitLimit: true,
+      dynamicSlippage: { maxBps: maxSlippageBps },
+      prioritizationFeeLamports: 'auto',
+    };
+    
+    // Only add feeAccount if wallet is configured
+    if (feeAccount) {
+      swapBody.feeAccount = feeAccount;
+      console.log(`  💰 Platform fee: ${PLATFORM_FEE_BPS}bps → ${feeAccount.slice(0, 8)}...`);
+    } else {
+      console.warn('⚠️ Platform fee wallet not configured - no fees will be collected');
+    }
+    
     const res = await fetch(swapUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        quoteResponse: quote,
-        userPublicKey,
-        wrapAndUnwrapSol: true,
-        useSharedAccounts: true,
-        dynamicComputeUnitLimit: true,
-        dynamicSlippage: { maxBps: maxSlippageBps },
-        prioritizationFeeLamports: 'auto',
-      })
+      body: JSON.stringify(swapBody)
     });
     
     if (!res.ok) {
