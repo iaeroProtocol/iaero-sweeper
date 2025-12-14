@@ -831,6 +831,7 @@ export async function getJupiterSwapTransaction(
       useSharedAccounts: true,
       dynamicComputeUnitLimit: true,
       dynamicSlippage: { maxBps: maxSlippageBps },
+      useLatestBlockhash: true,
       prioritizationFeeLamports: 'auto',
     };
     
