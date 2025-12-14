@@ -1054,7 +1054,7 @@ export default function SolanaSweeperPage() {
               </div>
               
               {/* Chain Switcher */}
-              <div className="hidden sm:flex items-center gap-1 bg-slate-800/50 rounded-xl p-1 border border-slate-700/50 ml-4">
+              <div className="flex items-center gap-1 bg-slate-800/50 rounded-xl p-1 border border-slate-700/50">
                 <a
                   href="/sweeper"
                   className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-700/50 transition-all"
@@ -1075,7 +1075,7 @@ export default function SolanaSweeperPage() {
               </div>
               
               {/* Social Links */}
-              <div className="hidden md:flex items-center gap-3 ml-4">
+              <div className="flex items-center gap-3 ml-4">
                 <a
                   href="https://docs.iaero.finance"
                   target="_blank"

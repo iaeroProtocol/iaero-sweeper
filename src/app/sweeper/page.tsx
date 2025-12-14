@@ -2891,7 +2891,7 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
               </div>
 
               {/* Chain Switcher */}
-              <div className="hidden sm:flex items-center gap-1 bg-slate-800/50 rounded-xl p-1 border border-slate-700/50">
+              <div className="flex items-center gap-1 bg-slate-800/50 rounded-xl p-1 border border-slate-700/50">
                 <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-blue-600 text-white shadow-lg">
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M12 1.75l-6.25 10.5L12 16l6.25-3.75L12 1.75zM5.75 13.5L12 22.25l6.25-8.75L12 17.25 5.75 13.5z"/>
@@ -2912,7 +2912,7 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
               </div>
 
               {/* Social Links */}
-              <div className="hidden md:flex items-center gap-3 ml-4">
+              <div className="flex items-center gap-3 ml-4">
                 <a
                   href="https://docs.iaero.finance"
                   target="_blank"
