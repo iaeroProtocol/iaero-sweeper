@@ -2242,20 +2242,153 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
           } catch (execError: any) {
             const errorMsg = execError.message || String(execError);
             console.error(`  ❌ Batch ${batchNum} execution failed:`, errorMsg.slice(0, 100));
-            
-            if (errorMsg.includes('reverted on-chain') || errorMsg.includes('Transaction reverted')) {
-              for (const swap of planToExecute) {
-                failedTokens.set(swap.tokenIn.toLowerCase(), 'Transaction reverted: likely slippage exceeded');
-                totalFailed++;
+
+            // Try to re-quote and retry once before falling back to individual execution
+            console.log(`  🔄 Re-quoting and retrying batch ${batchNum}...`);
+            setProgressStep(`Batch ${batchNum}/${totalBatches}: Re-quoting for retry...`);
+
+            let retrySucceeded = false;
+            try {
+              // Find the original tokens from batchQuotes that are in planToExecute
+              const tokensToRetry = planToExecute.map(s => s.tokenIn.toLowerCase());
+              const quotesToRetry = batchQuotes.filter((sq: QuotePreviewItem) =>
+                tokensToRetry.includes(sq.token.address.toLowerCase())
+              );
+
+              // Re-fetch quotes for these tokens
+              const retryQuotePromises = quotesToRetry.map(async (sq: QuotePreviewItem) => {
+                try {
+                  const freshQuote = await fetch0xQuote(
+                    chainId,
+                    sq.token.address,
+                    outputTokenAddr,
+                    sq.token.amountToSwap,
+                    config.swapper
+                  );
+                  if (!freshQuote?.transaction?.to || !freshQuote?.transaction?.data) {
+                    throw new Error('Invalid quote');
+                  }
+                  return { sq, freshQuote, error: null };
+                } catch (err: any) {
+                  return { sq, freshQuote: null, error: err.message };
+                }
+              });
+
+              const retryQuoteResults = await Promise.all(retryQuotePromises);
+              const validRetryQuotes: QuotePreviewItem[] = [];
+
+              for (const { sq, freshQuote, error } of retryQuoteResults) {
+                if (freshQuote) {
+                  validRetryQuotes.push({
+                    ...sq,
+                    quote: {
+                      token: sq.token,
+                      buyAmount: BigInt(freshQuote.buyAmount),
+                      buyAmountFormatted: freshQuote.buyAmount,
+                      transactionTo: freshQuote.transaction.to,
+                      transactionData: freshQuote.transaction.data,
+                      priceImpact: parseFloat(freshQuote.estimatedPriceImpact || '0'),
+                    },
+                  });
+                } else {
+                  console.log(`    ⚠️ Re-quote failed for ${sq.token.symbol}: ${error}`);
+                }
               }
-            } else {
+
+              if (validRetryQuotes.length > 0) {
+                // Build new plan with fresh quotes and higher slippage
+                const retryPlan: SwapStep[] = validRetryQuotes.map((sq: QuotePreviewItem) => {
+                  const q = sq.quote;
+                  const encodedData = encodeAbiParameters(
+                    [{ type: 'address' }, { type: 'bytes' }],
+                    [q.transactionTo, q.transactionData]
+                  );
+                  const priceImpactBps = Math.ceil((q.priceImpact || 0) * 100);
+                  // Use 1.5x normal slippage on retry
+                  const baseSlippage = Math.min(500, Math.max(30, 30 + Math.ceil(priceImpactBps * 1.5)));
+                  const retrySlippage = Math.ceil(baseSlippage * 1.5);
+
+                  return {
+                    kind: RouterKind.AGGREGATOR,
+                    tokenIn: sq.token.address,
+                    outToken: outputTokenAddr,
+                    useAll: sq.token.amountToSwap >= sq.token.balance,
+                    amountIn: sq.token.amountToSwap,
+                    quotedIn: sq.token.amountToSwap,
+                    quotedOut: q.buyAmount,
+                    slippageBps: retrySlippage,
+                    data: encodedData as `0x${string}`,
+                    viaPermit2: false,
+                    permitSig: '0x' as `0x${string}`,
+                    permitAmount: 0n,
+                    permitDeadline: 0n,
+                    permitNonce: 0n
+                  };
+                });
+
+                // Simulate retry batch
+                setProgressStep(`Batch ${batchNum}/${totalBatches}: Simulating retry...`);
+                const { passing: retryPassing } = await simulateSwaps(retryPlan, address);
+
+                if (retryPassing.length > 0) {
+                  // Validate and execute retry
+                  const retryGas = await publicClient.estimateContractGas({
+                    address: config.swapper,
+                    abi: SWAPPER_ABI,
+                    functionName: 'executePlanFromCaller',
+                    // @ts-ignore
+                    args: [retryPassing, address],
+                    account: address,
+                  });
+
+                  setProgressStep(`Batch ${batchNum}/${totalBatches}: Executing retry...`);
+                  console.log(`  🔁 Retrying batch with ${retryPassing.length} fresh quotes...`);
+
+                  const retryHash = await writeContractAsync({
+                    address: config.swapper,
+                    abi: SWAPPER_ABI,
+                    functionName: 'executePlanFromCaller',
+                    // @ts-ignore
+                    args: [retryPassing, address],
+                    gas: (retryGas * 150n) / 100n
+                  });
+
+                  setTxHash(retryHash);
+                  const retryReceipt = await publicClient.waitForTransactionReceipt({ hash: retryHash });
+
+                  if (retryReceipt.status === 'success') {
+                    console.log(`  ✅ Batch ${batchNum} retry succeeded: ${retryPassing.length} swaps`);
+                    for (const swap of retryPassing) {
+                      successfulTokens.add(swap.tokenIn.toLowerCase());
+                      totalSuccess++;
+                    }
+                    retrySucceeded = true;
+
+                    // Mark tokens that weren't in retryPassing as failed
+                    for (const swap of planToExecute) {
+                      const addr = swap.tokenIn.toLowerCase();
+                      if (!retryPassing.some(r => r.tokenIn.toLowerCase() === addr)) {
+                        failedTokens.set(addr, 'Failed to re-quote');
+                        totalFailed++;
+                      }
+                    }
+                  }
+                }
+              }
+            } catch (retryError: any) {
+              console.log(`  ⚠️ Retry failed: ${retryError.message?.slice(0, 80)}`);
+            }
+
+            // If retry didn't succeed, fall back to individual execution
+            if (!retrySucceeded) {
+              console.log(`  🔄 Retry failed, trying individual execution...`);
               const { successCount, successfulAddresses } = await executeProblemTokensIndividually(planToExecute, address);
-              
+
               for (const addr of successfulAddresses) {
                 successfulTokens.add(addr);
               }
               totalSuccess += successCount;
-              
+
               for (const swap of planToExecute) {
                 const addr = swap.tokenIn.toLowerCase();
                 if (!successfulAddresses.includes(addr)) {
