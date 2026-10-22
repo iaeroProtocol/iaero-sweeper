@@ -347,7 +347,8 @@ const KNOWN_GOOD_TOKENS: Record<number, Set<string>> = {
     '0xf57e7e7c23978c3caec3c3548e3d615c346e79ff',
   ].map(a => a.toLowerCase())),
   8453: new Set([
-    '0x940181a94a35a4569e4529a3cdfb74e38fd98631',
+    '0x940181a94a35a4569e4529a3cdfb74e38fd98631', // AERO (Aerodrome, old)
+    '0x3f5bf3edac59d650d8fdf9657a71f2f904a3a4ee', // AERO (Aero, new since 2026-10-22)
     '0x2ae3f1ec7f1f5012cfeab0185bfc7aa3cf0dec22',
     '0xc1cba3fcea344f92d9239c08c0568f6f2f0ee452',
     '0xb6fe221fe9eef5aba221c348ba20a1bf5e73624c',
@@ -390,6 +391,18 @@ const KNOWN_GOOD_TOKENS: Record<number, Set<string>> = {
 function isKnownGoodToken(chainId: number, address: string): boolean {
   const whitelist = KNOWN_GOOD_TOKENS[chainId];
   return whitelist ? whitelist.has(address.toLowerCase()) : false;
+}
+
+// Tokens that share a symbol with another token on the same chain; the label is shown next to the symbol.
+const TOKEN_LABELS: Record<number, Record<string, string>> = {
+  8453: {
+    '0x940181a94a35a4569e4529a3cdfb74e38fd98631': 'Aerodrome (old)',
+    '0x3f5bf3edac59d650d8fdf9657a71f2f904a3a4ee': 'Aero (new)',
+  },
+};
+
+function getTokenLabel(chainId: number, address: string): string | undefined {
+  return TOKEN_LABELS[chainId]?.[address.toLowerCase()];
 }
 
 const KNOWN_GOOD_SYMBOLS = new Set([
@@ -3417,6 +3430,9 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2">
                                   <span className="font-medium text-white">{token.symbol}</span>
+                                  {getTokenLabel(chainId, token.address) && (
+                                    <span className="text-xs text-slate-400">{getTokenLabel(chainId, token.address)}</span>
+                                  )}
                                   <span className="text-xs text-slate-500">{shortenAddress(token.address)}</span>
                                 </div>
                                 <div className="text-sm text-slate-400">
@@ -3534,6 +3550,9 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
                                     <div className="flex-1 min-w-0">
                                       <div className="flex items-center gap-2">
                                         <span className="font-medium text-white">{token.symbol}</span>
+                                        {getTokenLabel(chainId, token.address) && (
+                                          <span className="text-xs text-slate-400">{getTokenLabel(chainId, token.address)}</span>
+                                        )}
                                         <span className="text-xs text-slate-500">{shortenAddress(token.address)}</span>
                                         <span className="text-xs text-yellow-500 bg-yellow-500/10 px-1.5 py-0.5 rounded">No price</span>
                                       </div>
