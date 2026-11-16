@@ -67,8 +67,12 @@ export function isProvenNotSubmitted(error: unknown): boolean {
   return false;
 }
 export async function mapBounded<T,R>(items: readonly T[], limit: number, fn: (value:T,index:number)=>Promise<R>): Promise<R[]> {
-  const results = new Array<R>(items.length); let next=0;
-  await Promise.all(Array.from({length: Math.min(limit,items.length)}, async()=>{for(;;){const i=next++; if(i>=items.length)return;results[i]=await fn(items[i],i);}}));
+  const results = new Array<R>(items.length); let next=0,failed=false,failure:unknown;
+  await Promise.all(Array.from({length: Math.min(limit,items.length)}, async()=>{
+    while(!failed){const i=next++;if(i>=items.length)return;try{results[i]=await fn(items[i],i);}catch(error){if(!failed){failed=true;failure=error;}}}
+  }));
+  // Let already running reads settle; no task or state mutation outlives this call.
+  if(failed)throw failure;
   return results;
 }
 

@@ -34,12 +34,22 @@ frontend/src/live/native-sweep.ts. No staking, claims, APY or full bootstrap dep
    the5%total pool-fee/impact quality limit. Quotes exceeding that limit are held.
 
 4. Separate native and0x batches. Up to10 native inputs with one output/account:
-   const batch=buildBaseNativeBatch(quotes,{account,deadline:unixSecondsBigInt});
+   const batch=buildBaseNativeBatch(quotes,{account,deadline:unixSecondsBigInt,
+     minimums:originalReviewedPerLegFloors}); // optional readonlybigint[]
    Deadline must be within the next300seconds. Result is a viem-compatible request
    {address,abi,functionName:'execute',args,value:0n,account} plus quotes/touchedTokens.
    It has NO transfer of nativeETH. Homogeneous CL/V2 paths use a whole-path command;
    mixed paths use exact first input, router-funded actual intermediate balance and
    only a final gross floor. No intermediate estimated amount becomes a swap minimum.
+   Optional minimums must match the quote count and contain positiveuint256 values.
+   batch.minimums stores max(fresh quote.minimumNet, original floor) for each leg,
+   with selected floor <= fresh netAmountOut. Fresh quote proof/derived-min equality
+   and the5%quality floor are unchanged. Selected floors are encoded into the gross
+   swap floor and SWEEP; recheck binds the array, sum and calldata, and receipts use
+   the same selected floors. No-floor callers keep their previous encoded behavior.
+   Pass original reviewed floors through every repricing/build/simulation/submission
+   stage. A fresh computed slippage floor may fall while output remains inside the
+   original reviewed band; the original onchain minimum still protects that trade.
 
 5. Preview required approvals and trade together without storage/balance overrides:
    await simulateBaseNativeBatch(publicClient,batch,{account,withApprovals:true});
@@ -84,7 +94,7 @@ Primary local source anchors under:
 
 Focused offline tests (Node26, installed existing viem; no new framework):
  node --experimental-strip-types --test src/lib/base-native-sweep.test.mjs src/lib/base-native-discovery.test.mjs
-Nine tests cover pure encoding/rounding/receipts and successful discovery/full
+Eleven tests cover pure encoding/rounding/receipts and successful discovery/full
 sequential simulation using the real public runtime fixture. Pool/getter/AMM/balance
 responses are synthetic; this proves helper control flow, not actual token liquidity.
 base-native-runtime.fixture.json is test-only, read through NodeFS; never import it

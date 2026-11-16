@@ -270,7 +270,7 @@ interface SwapResultDetail {
   actualOutputUsd?: number;
   executionSlippage: number;
   totalCostPercent: number;
-  status: 'success' | 'failed' | 'skipped';
+  status: 'success' | 'failed' | 'skipped' | 'pending';
   error?: string;
 }
 
@@ -823,6 +823,9 @@ export default function TokenSweeperPage() {
   const [swapResults, setSwapResults] = useState<{
     success: number;
     failed: number;
+    skipped: number;
+    pending: number;
+    problem?: string;
     totalValue: number;
     totalOutput: string;
     outputToken: OutputToken;
@@ -1528,13 +1531,24 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
     sendLock.current=true;setIsProcessing(true);setShowQuotePreview(false);setError(null);setSwapResults(null);setDetailedResults([]);
     const results:SwapResultDetail[]=[];
     let received=0, success=0,totalRaw=0n;
+    let stopReason:string|undefined;
+    let awaitingSwap:QuotePreviewItem[]=[];
+    const failureText=(e:any)=>{
+      if(isWalletRejection(e))return 'Wallet request cancelled.';
+      const parts=[String(e?.shortMessage||e?.message||'Could not prepare this sweep.')];
+      for(let cause=e,depth=0;cause&&depth<5;cause=cause.cause,depth++){
+        for(const value of [cause.reason,cause.details])if(typeof value==='string'&&value&&!parts.includes(value))parts.push(value);
+      }
+      return parts.join(' ').replace(/https?:\/\/\S+/g,'[read service]').slice(0,400);
+    };
+    const isOperationBlocker=(e:any)=>!!e?.stopQueue||isProvenNotSubmitted(e)||/rate.?limit|429|timeout|timed out|HTTP request failed|failed to fetch|temporarily unavailable|runtime changed|missing a reviewed runtime pin|Native registry changed|Native factory registry is invalid/i.test(failureText(e));
     const assertWallet=async()=>{
       checkScope(captured);
       const [accounts,currentChain]=await Promise.all([walletClient.getAddresses(),walletClient.getChainId()]);
       checkScope(captured);
-      if(currentChain!==network||!accounts.some(a=>sameAddress(a,account)))throw new Error('Wallet or network changed. Review again.');
+      if(currentChain!==network||!accounts.some(a=>sameAddress(a,account)))throw Object.assign(new Error('Wallet or network changed. Review again.'),{stopQueue:true});
       const raw=localStorage.getItem(pendingKey(account,network));
-      if(raw)throw new Error('A previous wallet request needs to be checked before continuing.');
+      if(raw)throw Object.assign(new Error('A previous wallet request needs to be checked before continuing.'),{stopQueue:true});
     };
     const send=async(request:any,label:string)=>{
       await assertWallet();
@@ -1568,11 +1582,11 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
       // Confirmation removes the pending gate; no timeout or RPC error does.
       savePending(null,account,network);
       if(kind==='replacement')throw new Error('The wallet transaction was replaced or cancelled. Re-scan and review before continuing.');
-      if(receipt.status!=='success')throw new Error(`${label} reverted. Review the token before retrying.`);
+      if(receipt.status!=='success')throw Object.assign(new Error(`${label} reverted. Review the token before retrying.`),{confirmedRevert:true});
       checkScope(captured);
       return receipt;
     };
-    const result=(q:QuotePreviewItem,status:'success'|'failed'|'skipped',message?:string,actual?:bigint):SwapResultDetail=>({symbol:q.token.symbol,tokenIn:q.token.address,amountIn:q.token.amountToSwap,decimalsIn:q.token.decimals,inputValueUsd:q.inputValueUsd,quotedOutputUsd:q.quotedOutputUsd,actualOutputUsd:actual===undefined?undefined:Number(formatUnits(actual,preview.outputDecimals))*preview.outputPrice,executionSlippage:0,totalCostPercent:q.lossPercent,status,error:message});
+    const result=(q:QuotePreviewItem,status:'success'|'failed'|'skipped'|'pending',message?:string,actual?:bigint):SwapResultDetail=>({symbol:q.token.symbol,tokenIn:q.token.address,amountIn:q.token.amountToSwap,decimalsIn:q.token.decimals,inputValueUsd:q.inputValueUsd,quotedOutputUsd:q.quotedOutputUsd,actualOutputUsd:actual===undefined?undefined:Number(formatUnits(actual,preview.outputDecimals))*preview.outputPrice,executionSlippage:0,totalCostPercent:q.lossPercent,status,error:message});
     try {
       await assertWallet();
       const output=outputAddress(preview.outputToken);
@@ -1584,22 +1598,41 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
       const groups=[...Array.from({length:Math.ceil(nativeRows.length/10)},(_,i)=>nativeRows.slice(i*10,i*10+10)),...Array.from({length:Math.ceil(aggregatorRows.length/10)},(_,i)=>aggregatorRows.slice(i*10,i*10+10))];
       for(let groupIndex=0;groupIndex<groups.length;groupIndex++){
         const original=groups[groupIndex];
+        let submitting=false,swapConfirmed=false;
+        const groupSend=async(request:any,label:string)=>{submitting=true;const receipt=await send(request,label);submitting=false;return receipt;};
+        try {
         setProgressStep(`Preparing batch ${groupIndex+1} of ${groups.length}…`);
         await assertWallet();
         let nativePromise:ReturnType<typeof loadNative>|undefined;
         const native=()=>nativePromise??=loadNative();
-        const refresh=async()=>mapBounded(original,4,async q=>{
-          const fresh=await quoteToken(q.token,preview.outputToken,preview.outputPrice,native,q.quote.native?'native':'0x');
-          preserveMinimum(q.quote.minimum,fresh.minimum);
-          if(fresh.priceImpact>5&&!q.forceHighSlippage)throw new Error(`${q.token.symbol}: price impact changed. Review a new quote.`);
-          return {...q,quote:{...fresh,minimum:q.quote.native?fresh.minimum:q.quote.minimum}};
-        });
+        const refresh=async()=>{
+          const candidates=original.filter(q=>!results.some(r=>sameAddress(r.tokenIn,q.token.address)));
+          const values=await mapBounded(candidates,4,async q=>{
+            checkScope(captured);
+            try{
+              const fresh=await quoteToken(q.token,preview.outputToken,preview.outputPrice,native,q.quote.native?'native':'0x');
+              checkScope(captured);
+              // Preserve the approved absolute floor, not a newly shifted slippage band.
+              preserveMinimum(q.quote.minimum,fresh.buyAmount);
+              if(fresh.priceImpact>5&&!q.forceHighSlippage)throw new Error('Price impact changed. Review a new quote.');
+              return {...q,quote:{...fresh,minimum:q.quote.minimum}};
+            }catch(e){
+              checkScope(captured);
+              if(isOperationBlocker(e))throw e;
+              const reason=`${q.token.symbol}: ${failureText(e)}`;
+              if(!results.some(r=>sameAddress(r.tokenIn,q.token.address)))results.push(result(q,'skipped',reason));
+              return null;
+            }
+          });
+          return values.filter((q):q is QuotePreviewItem=>q!==null);
+        };
         let rows=await refresh();
+        if(!rows.length)continue;
         await assertWallet();
         let engine:Awaited<ReturnType<typeof loadNative>>['engine']|undefined;
         if(rows[0].quote.native){
           engine=(await native()).engine;
-          const batch=engine.buildBaseNativeBatch(rows.map(q=>q.quote.native!),{account,deadline:BigInt(Math.floor(Date.now()/1000)+240)});
+          const batch=engine.buildBaseNativeBatch(rows.map(q=>q.quote.native!),{account,deadline:BigInt(Math.floor(Date.now()/1000)+240),minimums:rows.map(q=>q.quote.minimum)});
           await engine.simulateBaseNativeBatch(publicClient as unknown as BaseNativeClient,batch,{account,withApprovals:true});
         }
         let approved=false;
@@ -1614,19 +1647,20 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
           if(allowance<q.token.amountToSwap){
             setProgressStep(`Approve ${q.token.symbol} in your wallet…`);
             // Some ERC20s require zero before changing a nonzero allowance.
-            if(allowance>0n)await send({address:q.token.address,abi:ERC20_ABI,functionName:'approve',args:[spender,0n]},`Reset ${q.token.symbol} approval`);
-            await send({address:q.token.address,abi:ERC20_ABI,functionName:'approve',args:[spender,q.token.amountToSwap]},`Approve ${q.token.symbol}`);
+            if(allowance>0n)await groupSend({address:q.token.address,abi:ERC20_ABI,functionName:'approve',args:[spender,0n]},`Reset ${q.token.symbol} approval`);
+            await groupSend({address:q.token.address,abi:ERC20_ABI,functionName:'approve',args:[spender,q.token.amountToSwap]},`Approve ${q.token.symbol}`);
             approved=true;
           }
         }
         if(approved||rows.some(q=>Date.now()-q.quote.quotedAt>30_000)){
           nativePromise=undefined;rows=await refresh();
+          if(!rows.length)continue;
         }
         await assertWallet();
         if(rows.some(q=>Date.now()-q.quote.quotedAt>QUOTE_TTL_MS))throw new Error('Quotes expired. Review fresh quotes.');
         let request:any,batch:any;
         if(engine){
-          batch=engine.buildBaseNativeBatch(rows.map(q=>q.quote.native!),{account,deadline:BigInt(Math.floor(Date.now()/1000)+240)});
+          batch=engine.buildBaseNativeBatch(rows.map(q=>q.quote.native!),{account,deadline:BigInt(Math.floor(Date.now()/1000)+240),minimums:rows.map(q=>q.quote.minimum)});
           await engine.simulateBaseNativeBatch(publicClient as unknown as BaseNativeClient,batch,{account,withApprovals:false});
           request={address:batch.address,abi:batch.abi,functionName:batch.functionName,args:batch.args};
         }else{
@@ -1642,7 +1676,9 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
         request.gas=gas;
         if(engine)await engine.recheckBaseNativeBatch(publicClient as unknown as BaseNativeClient,batch,account);
         setProgressStep(`Confirm batch ${groupIndex+1} of ${groups.length} in your wallet…`);
-        const receipt=await send(request,`Sweep batch ${groupIndex+1}`);
+        awaitingSwap=rows;
+        const receipt=await groupSend(request,`Sweep batch ${groupIndex+1}`);
+        swapConfirmed=true;awaitingSwap=[];
         // From here the batch has executed. A receipt parsing error never replays it.
         success+=rows.length;
         rows.forEach(q=>results.push(result(q,'success')));
@@ -1652,13 +1688,34 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
           const actual=engine.baseNativeReceipt(receipt.logs,batch);
           rows.forEach((q,i)=>{const idx=results.findIndex(r=>sameAddress(r.tokenIn,q.token.address));results[idx]=result(q,'success',undefined,actual.rows[i].netOutput);});
         }
+        }catch(e){
+          checkScope(captured);
+          if(submitting||swapConfirmed)throw e;
+          const reason=failureText(e);
+          if(isOperationBlocker(e))throw e;
+          const remaining=original.filter(q=>!results.some(r=>sameAddress(r.tokenIn,q.token.address)));
+          if(remaining.length>1){
+            const middle=Math.ceil(remaining.length/2);
+            groups.splice(groupIndex+1,0,remaining.slice(0,middle),remaining.slice(middle));
+          }else for(const q of remaining)results.push(result(q,'skipped',`${q.token.symbol}: ${reason}`));
+        }
       }
     }catch(e:any){
-      if(contextRef.current.key===captured.key&&contextRef.current.epoch===captured.epoch)setError(isWalletRejection(e)?'Wallet request cancelled.':e?.shortMessage||e?.message||'Could not complete the sweep. Check wallet activity before retrying.');
+      if(e?.confirmedRevert&&awaitingSwap.length){for(const q of awaitingSwap)results.push(result(q,'failed',failureText(e)));awaitingSwap=[];}
+      stopReason=failureText(e);
+      if(contextRef.current.key===captured.key&&contextRef.current.epoch===captured.epoch)setError(stopReason);
     }finally{
-      for(const q of chosen)if(!results.some(r=>sameAddress(r.tokenIn,q.token.address)))results.push(result(q,'skipped','Not sent. Review balances and any pending transaction before retrying.'));
+      let pendingRecord:PendingSweep|null=null;
+      try{const raw=localStorage.getItem(pendingKey(account,network));if(raw)pendingRecord=validatePending(JSON.parse(raw),account,network);}catch{/* Existing journal gate remains held. */}
+      for(const q of chosen)if(!results.some(r=>sameAddress(r.tokenIn,q.token.address))){
+        const unresolved=!!pendingRecord&&awaitingSwap.some(row=>sameAddress(row.token.address,q.token.address));
+        results.push(result(q,unresolved?'pending':'skipped',unresolved?'Awaiting transaction confirmation. Check this request before any retry.':stopReason||'No transaction was sent for this token.'));
+      }
+      const skippedCount=results.filter(r=>r.status==='skipped').length;
+      const pendingCount=results.filter(r=>r.status==='pending').length;
+      const problem=stopReason||((skippedCount||pendingCount)?results.find(r=>r.error)?.error:undefined);
       if(contextRef.current.key===captured.key&&contextRef.current.epoch===captured.epoch){
-        setDetailedResults(results);setSwapResults({success,failed:results.filter(r=>r.status!=='success').length,totalValue:received,totalOutput:formatUnits(totalRaw,preview.outputDecimals),outputToken:preview.outputToken,valuationAvailable:preview.outputPrice>0});setShowResultsModal(true);setIsProcessing(false);setProgressStep('');setQuotePreviewData(null);
+        setDetailedResults(results);setSwapResults({success,failed:results.filter(r=>r.status==='failed').length,skipped:skippedCount,pending:pendingCount,problem,totalValue:received,totalOutput:formatUnits(totalRaw,preview.outputDecimals),outputToken:preview.outputToken,valuationAvailable:preview.outputPrice>0});setShowResultsModal(true);setIsProcessing(false);setProgressStep('');setQuotePreviewData(null);
       }
       sendLock.current=false;
       if(contextRef.current.key===captured.key&&contextRef.current.epoch===captured.epoch&&success>0&&!localStorage.getItem(pendingKey(account,network)))void scanWalletTokens(true);
@@ -1963,18 +2020,18 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-slate-800 border border-slate-700 rounded-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden shadow-2xl"
+            className="flex flex-col bg-slate-800 border border-slate-700 rounded-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden shadow-2xl"
           >
-            <div className="p-6 border-b border-slate-700 bg-gradient-to-r from-emerald-500/10 to-teal-500/10">
+            <div className="p-6 shrink-0 border-b border-slate-700 bg-gradient-to-r from-emerald-500/10 to-teal-500/10">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
-                    <CheckCircle className="w-7 h-7 text-white" />
+                    {swapResults?.success&&!swapResults?.pending?<CheckCircle className="w-7 h-7 text-white" />:<AlertTriangle className="w-7 h-7 text-white" />}
                   </div>
                   <div>
-                    <h3 className="text-xl font-bold text-white">Sweep Complete</h3>
+                    <h3 className="text-xl font-bold text-white">{swapResults?.pending?'Sweep awaiting confirmation':!swapResults?.success?(swapResults?.failed?'Sweep failed':'Sweep not sent'):swapResults.skipped||swapResults.failed?'Sweep partially completed':'Sweep Complete'}</h3>
                     <p className="text-sm text-slate-400">
-                      {swapResults?.success || 0} successful, {swapResults?.failed || 0} failed
+                      {swapResults?.success || 0} swapped · {swapResults?.skipped || 0} not sent{swapResults?.pending?` · ${swapResults.pending} awaiting confirmation`:''}{swapResults?.failed?` · ${swapResults.failed} failed`:''}
                     </p>
                   </div>
                 </div>
@@ -1986,6 +2043,7 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
                 </button>
               </div>
               
+              {swapResults?.problem && <div role="alert" className="mt-4 p-3 rounded-lg border border-yellow-500/30 bg-yellow-500/10 text-sm text-yellow-200">{swapResults.problem}</div>}
               <div className="grid grid-cols-3 gap-4 mt-4">
                 <div className="bg-slate-900/50 rounded-lg p-3">
                   <p className="text-xs text-slate-400">Total Input Value</p>
@@ -2040,7 +2098,7 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
               )}
             </div>
             
-            <div className="overflow-y-auto max-h-[400px] p-4">
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
               <table className="w-full">
                 <thead className="text-xs text-slate-400 uppercase tracking-wider">
                   <tr>
@@ -2118,7 +2176,7 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
               )}
             </div>
             
-            <div className="p-4 border-t border-slate-700 bg-slate-900/50">
+            <div className="p-4 shrink-0 border-t border-slate-700 bg-slate-900/50">
               <button
                 onClick={() => setShowResultsModal(false)}
                 className="w-full py-3 px-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-semibold rounded-xl transition-all duration-200"
@@ -2667,7 +2725,7 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
 
                   <button
                     onClick={fetchQuotesAndShowPreview}
-                    disabled={isProcessing || selectedCount === 0}
+                    disabled={isProcessing || isScanning || selectedCount === 0 || !!pending || journalError}
                     className="w-full py-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-semibold text-lg transition flex items-center justify-center gap-2"
                   >
                     {isProcessing ? (
@@ -2713,7 +2771,7 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
 
         {/* Success Display */}
         <AnimatePresence>
-          {swapResults && (
+          {swapResults && swapResults.success > 0 && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}

@@ -9,9 +9,11 @@ Behavior
 - Generic native Aerodrome V2/CL discovery supplements 0x. B20 stock addresses try native pools first. Other ERC20s use the same factory, code, units, liquidity and receipt checks; there is no ticker allowlist.
 - Unsupported/paused/restricted/no-liquidity tokens remain unswapped. Discovery is a bounded union, not a promise that every asset was indexed or is sellable. Manual address entry remains available. Tokens whose units cannot be read cannot be selected.
 - Existing 5 bps Treasury fee is preserved. Native swaps apply the fee atomically before the net minimum sweep. No new contracts or token permissions are deployed.
-- Confirmed exact input caps, exact approvals, immutable account/chain/nonce intent and output minimums survive the approval flow. Changed minimums require another review.
+- Confirmed exact input caps, exact approvals, immutable account/chain/nonce intent and output minimums survive the approval flow. Refresh compares fresh net output with the original absolute minimum. Movement within that approved band can proceed; below-minimum tokens are held while other eligible tokens continue.
 - A pending receipt, ambiguous provider response or replacement never automatically replays a sale. Pending records survive refresh. The original sender/nonce and a canonical receipt prove a repricing or cancellation before the gate clears.
 - Confirmed proceeds are retained in partial-batch summaries. Unavailable USD marks display raw token output.
+- Token-specific read-only preparation failures are isolated, and failed read-only batches can split before submission. Wallet rejection, uncertain receipts and service outages halt the queue. No transaction is automatically replayed.
+- Results distinguish swapped, not sent, pending and confirmed failures, with the actual reason visible in the Results dialog. A zero-swap run is never labelled complete.
 
 Performance
 - Native routing is dynamically imported after selection, not at startup.
@@ -40,3 +42,7 @@ Restore the parent application release. The change makes no onchain configuratio
 
 Validation boundaries
 Independent source reviews cover native helper, read APIs and integrated execution. Browser wallet tests are isolated synthetic EIP1193/RPC fixtures; they never sign or send real transactions. Lead read-only Base simulations cover real stock-token execution without state overrides. These checks are not an external contract audit, a live mainnet transaction or a guarantee of future liquidity.
+
+16 Nov batch repair
+The live treasury reproduction selected 108 executable quotes and stopped before any wallet request because a refreshed slippage-derived floor was compared with the original floor, even while the fresh net quote still satisfied the approved minimum. The old UI then displayed Sweep Complete / 108 failed and hid the cause below the modal. The repair preserves original absolute floors onchain, isolates token-local preparation failures, and reports the true outcome. A repaired real-read production run reached its first approval request, which the fake wallet deliberately rejected; no transaction was sent.
+Validation: 26 offline tests, 15 mock wallet scenarios (including 116 inputs with 1 blocked / 115 unique successful trades), six independent production-browser repair cases, successful production build/release checks and no open Medium/High in the additive source reviews. These are test fixtures/read-only simulations, not actual user trades.

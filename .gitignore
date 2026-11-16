@@ -52,3 +52,7 @@ coverage/
 # pnpm-lock.yaml
 
 .next-production/
+
+.next-repair/
+
+.next-fixed/

@@ -51,3 +51,12 @@ test('repricing and cancellation require the proven original sender and nonce',(
  assert.throws(()=>pendingTransactionKind({...p,nonce:undefined},{...tx,to:account,input:'0x'}));
  assert.throws(()=>pendingTransactionKind({...p,nonce:undefined},tx));
 });
+
+test('a global read failure stops new work and waits for in-flight reads',async()=>{
+ const started=[],settled=[];
+ const error=new Error('RPC rate limited');
+ await assert.rejects(mapBounded([0,1,2,3,4,5,6],3,async n=>{
+  started.push(n);await new Promise(r=>setTimeout(r,n===0?1:12));settled.push(n);if(n===0)throw error;return n;
+ }),e=>e===error);
+ assert.deepEqual(started,[0,1,2]);assert.deepEqual(settled.sort(),[0,1,2]);
+});
