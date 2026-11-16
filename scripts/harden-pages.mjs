@@ -3,17 +3,9 @@ import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {pathToFileURL,fileURLToPath} from 'node:url';
 import {verifyPagesGuard} from './verify-pages.mjs';
+import {guardInputs,guardVersion,guardEntry} from './pages-guard-contract.mjs';
 
-export const guardInputs = [
-  'edge/discovery-gateway.mjs', 'edge/pages-dispatch.mjs',
-  'edge/discovery-schema.sql', 'src/lib/sweeper-read-api.ts',
-  'src/app/api/tokens/discover/route.ts',
-];
-export const guardEntry = `// IAERO_DISCOVERY_GUARD_V1 — mandatory global admission before discovery.
-import nextWorker from './iaero-next.mjs';
-import {guardPages} from './iaero-discovery.mjs';
-export default guardPages(nextWorker);
-`;
+export {guardInputs,guardEntry};
 const sha = value => createHash('sha256').update(value).digest('hex');
 const root = fileURLToPath(new URL('../',import.meta.url));
 
@@ -22,14 +14,15 @@ export async function hardenPages({projectRoot=root, output='.vercel/output/stat
   const worker = path.join(outputRoot,'_worker.js');
   if (!(await stat(worker)).isDirectory()) throw new Error('Expected the next-on-pages _worker.js directory; refusing unrecognized output.');
   const entry = path.join(worker,'index.js');
-  if ((await readFile(entry,'utf8')).includes('IAERO_DISCOVERY_GUARD_V1')) {
+  if (/IAERO_(?:DISCOVERY_GUARD_V1|KEYED_API_GUARD_V2)/.test(await readFile(entry,'utf8'))) {
     throw new Error('Pages output is already guarded. Rebuild clean output before hardening again.');
   }
   const {build} = esbuild ?? await import('esbuild');
   const bundle = await build({
     stdin: {contents: `import {withDiscoveryGuard} from './edge/pages-dispatch.mjs';
-import {discoverTokens} from './src/lib/sweeper-read-api.ts';
-export const guardPages = nextWorker => withDiscoveryGuard(nextWorker,discoverTokens);`,
+import {discoverTokens,handleQuoteRequest} from './src/lib/sweeper-read-api.ts';
+import {parsePriceRequest,handlePriceRequest} from './src/lib/coingecko-read-api.ts';
+export const guardPages = nextWorker => withDiscoveryGuard(nextWorker,{discoverTokens,handleQuoteRequest,parsePriceRequest,handlePriceRequest});`,
       resolveDir:projectRoot,sourcefile:'iaero-discovery-entry.mjs',loader:'js'},
     absWorkingDir:projectRoot,bundle:true,format:'esm',platform:'browser',target:'es2022',
     sourcemap:false,minify:false,write:false,legalComments:'none',
@@ -38,7 +31,7 @@ export const guardPages = nextWorker => withDiscoveryGuard(nextWorker,discoverTo
   const compiled = bundle.outputFiles[0].contents;
   const original = await readFile(entry);
   const inputs = Object.fromEntries(await Promise.all(guardInputs.map(async file => [file,sha(await readFile(path.join(projectRoot,file)))])));
-  const manifest = {version:1,guard:'d1-v1',binding:'DISCOVERY_DB',inputs,
+  const manifest = {version:2,guard:guardVersion,binding:'DISCOVERY_DB',inputs,
     entrySha256:sha(guardEntry),nextSha256:sha(original),bundleSha256:sha(compiled)};
   // Original imports remain relative to the same directory. No ASSETS fallback
   // or public /functions middleware can call the provider helper outside here.

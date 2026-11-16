@@ -211,15 +211,16 @@ Publication of this review candidate is held pending outside review and owner
 approval. Follow [the discovery release runbook](edge/DISCOVERY_RELEASE.md).
 The required build command is `npm run build:pages`, with output
 `.vercel/output/static`. It wraps the existing adapter in the native discovery
-guard and verifies the resulting entry and source hashes. Discovery also needs
-the dedicated shared `DISCOVERY_DB` binding with its schema applied. An absent
-binding or guard returns 503 before any discovery provider can be called.
+guard and verifies the resulting entry and source hashes. Discovery, 0x quotes
+and CoinGecko prices share the dedicated `DISCOVERY_DB` budget. Both
+`edge/discovery-schema.sql` and `edge/provider-budget-schema.sql` must be applied.
+An absent binding, schema or guard returns 503 before any keyed provider call.
 Keep provider keys server-only; no new browser API key is required.
 
 ### Vercel
 
-Plain Next/Vercel deployments intentionally leave discovery unavailable. The
-native Cloudflare guard must be present for provider discovery to function.
+Plain Next/Vercel deployments intentionally leave all keyed APIs unavailable.
+The native Cloudflare guard must be present for discovery, quotes and prices.
 
 ### Manual Build
 

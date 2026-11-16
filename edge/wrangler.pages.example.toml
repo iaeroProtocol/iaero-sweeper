@@ -10,4 +10,6 @@ binding = "DISCOVERY_DB"
 database_name = "iaero-sweeper-discovery"
 database_id = "REPLACE_WITH_DEDICATED_DATABASE_UUID"
 # Bind the SAME primary database to every public discovery route/hostname.
+# This SAME binding guards discovery, 0x and CoinGecko. Apply BOTH schema files:
+# edge/discovery-schema.sql and edge/provider-budget-schema.sql.
 # Do not enable read replication or reuse a protocol/accounting database.

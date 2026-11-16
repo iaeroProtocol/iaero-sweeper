@@ -30,7 +30,10 @@ test('real edge bundle wraps original entry without modifying it; repeated harde
   const bundle=await readFile(path.join(f.worker,'iaero-discovery.mjs'),'utf8');
   assert.match(bundle,/DISCOVERY_DB/);
   assert.match(bundle,/INSERT INTO discovery_attempts/);
-  assert.doesNotMatch(bundle,/ZERO_EX_API_KEY|process\.env|\/Users\//);
+  assert.match(bundle,/ZERO_EX_API_KEY/);
+  assert.match(bundle,/COINGECKO_API_KEY/);
+  assert.match(bundle,/provider_usage/);
+  assert.doesNotMatch(bundle,/process\.env|\/Users\//);
   assert.deepEqual(await verifyPagesGuard({projectRoot:f.projectRoot}),manifest);
   await assert.rejects(hardenPages({projectRoot:f.projectRoot}),/already guarded/);
 }));
@@ -40,7 +43,7 @@ test('release rejects a stale source or any altered wrapped/compiled/original en
   for(const file of ['index.js','iaero-next.mjs','iaero-discovery.mjs']) {
     const target=path.join(f.worker,file),original=await readFile(target);
     await writeFile(target,Buffer.concat([original,Buffer.from('\n// altered\n')]));
-    await assert.rejects(verifyPagesGuard({projectRoot:f.projectRoot}),/changed/);
+    await assert.rejects(verifyPagesGuard({projectRoot:f.projectRoot}),file==='index.js'?/bypasses mandatory provider admission/:/changed/);
     await writeFile(target,original);
   }
   await writeFile(path.join(f.projectRoot,'edge/discovery-gateway.mjs'),'// stale compiled source\n');

@@ -5,11 +5,11 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "build:pages": "npx --yes @cloudflare/next-on-pages@1.13.16 && node scripts/harden-pages.mjs && node scripts/verify-pages.mjs",
+    "build:pages": "node scripts/build-pages.mjs && node scripts/verify-pages.mjs",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test --test-concurrency=2 src/lib/*.test.mjs edge/discovery-gateway.test.mjs scripts/*.test.mjs",
+    "test": "node --experimental-strip-types --test --test-concurrency=2 src/lib/*.test.mjs edge/discovery-gateway.test.mjs edge/provider-budget.test.mjs edge/keyed-api-gateway.test.mjs scripts/*.test.mjs",
     "check:release": "node scripts/check-release.mjs",
     "check:pages": "node scripts/verify-pages.mjs"
   },

@@ -1,7 +1,11 @@
-import {type NextRequest,NextResponse} from 'next/server';
-import {handleQuoteRequest} from '../../../../lib/sweeper-read-api';
-export const runtime='edge';
-export async function GET(request:NextRequest){
- const reply=await handleQuoteRequest(request.nextUrl.searchParams,{ZERO_EX_API_KEY:process.env.ZERO_EX_API_KEY,SWAP_FEE_BPS:process.env.SWAP_FEE_BPS,SWAP_FEE_RECIPIENT:process.env.SWAP_FEE_RECIPIENT},{signal:request.signal});
- return NextResponse.json(reply.data,{status:reply.status,headers:reply.headers});
+import {NextResponse} from 'next/server';
+export const runtime = 'edge';
+
+// Served directly by the mandatory native Pages budget gateway. Keeping this
+// fallback inert prevents alternate/normalized Next paths bypassing admission.
+export async function GET() {
+  return NextResponse.json({code:'PROVIDER_BUDGET_UNAVAILABLE',
+    error:'Quote service is temporarily unavailable. Retry shortly.'},
+  {status:503,headers:{'cache-control':'no-store','retry-after':'60',
+    'x-provider-budget':'required','x-provider-budget-state':'unavailable'}});
 }

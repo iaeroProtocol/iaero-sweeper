@@ -1,0 +1,38 @@
+Bounded CoinGecko read helper (no public route or limiter in this module)
+
+parsePriceRequest(body) accepts exactly {chainId,addresses}. chainId is an integer
+from the existing nine-chain platform map. addresses is a1..100 array of valid
+nonzero/non-eeee ERC20 address strings; malformed/unknown keys are rejected.
+The result is frozen {chainId,addresses,cost}; addresses are lowercase/deduplicated
+and cost=ceil(unique/50), either1 or2. The100 cap applies before deduplication.
+Invalid requests throw the fixed Error('Invalid price request.').
+
+Dispatcher contract: require strict application/json, stream/cap body at8KiB,
+parse it, atomically admit the parsed cost under the shared persistent budget,
+then call handlePriceRequest(parsed,env,options). Environment binding/key access
+must remain after dispatcher admission. This helper revalidates the parsed shape
+and cost before reading env.COINGECKO_API_KEY, but does not independently prove
+admission; it must not be exposed as an unguarded fallback endpoint.
+
+handlePriceRequest accepts options {fetchImpl?,signal?,budgetMs?}. budgetMs can
+shorten but cannot extend the shared3500ms whole-request deadline. At most two
+concurrent GETs of at most50 addresses go to the fixed HTTPS pro-api.coingecko.com
+simple/token_price path for the validated platform. Proper URLSearchParams bind
+contract_addresses/vs_currencies=usd. The key is an upstream header only. Redirects
+are manual/rejected; there are no retries or sleeps. Each response is streamed
+with a256KiB byte cap (at most512KiB for two concurrent responses). Cancellation
+and an outer Promise race bound return time even when a transport/body ignores
+AbortSignal. Late work cannot start further provider calls or publish prices.
+
+ApiResult={status,data:{prices,logs,found,requested,code?,error?},headers}. On200,
+prices retains the existing numeric-price response contract: only requested token
+keys and positive finite numeric USD values. Missing/invalid prices remain absent,
+not zero. No provider timestamps are added or invented; M01 retains its explicit
+bounded retrieval-time fallback for this existing numeric response.
+
+Any batch failure discards all batches' prices. An upstream429 returns429 and a
+safe numeric retry-after (default30s, maximum300s). Invalid responses, transport,
+timeout/cancellation and other upstream errors return503 with fixed codes/text.
+Invalid parsed input returns400 without key access. No body, exception, URL,
+redirect target, key or arbitrary provider log is returned. All responses have
+cache-control:no-store. No real provider/credential is needed for the tests.
