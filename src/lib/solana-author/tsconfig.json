@@ -1,0 +1,1 @@
+{"extends":"../../../tsconfig.json","compilerOptions":{"incremental":false},"include":["../solana-intent.ts","../solana-pending.ts","../solana-read-api.ts","../../components/solana-sweeper/solana-swap.ts","../../components/solana-sweeper/SolanaSweeper.tsx","../../../next-env.d.ts"],"exclude":["../../../node_modules"]}

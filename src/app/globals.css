@@ -178,7 +178,7 @@ input[type='number'] { -moz-appearance: textfield; }
 .iaero-sweeper :is([class~='text-white'], [class~='text-slate-200'], [class~='text-slate-300']) { color: var(--ink); }
 .iaero-sweeper :is([class~='text-slate-400'], [class~='text-slate-500'], [class~='text-slate-600']) { color: var(--muted); }
 .iaero-sweeper :is([class~='text-emerald-200'], [class~='text-emerald-200/70'], [class~='text-emerald-300'], [class~='text-emerald-400'], [class~='text-green-400']) { color: var(--green); }
-.iaero-sweeper :is([class~='text-yellow-200'], [class~='text-yellow-200/70'], [class~='text-yellow-400'], [class~='text-yellow-500'], [class~='text-orange-300']) { color: var(--amber); }
+.iaero-sweeper :is([class~='text-yellow-200'], [class~='text-yellow-200/70'], [class~='text-yellow-400'], [class~='text-yellow-500'], [class~='text-orange-300'], [class~='text-amber-200'], [class~='text-amber-300'], [class~='text-amber-400'], [class~='text-amber-400/80']) { color: var(--amber); }
 .iaero-sweeper :is([class~='text-red-200'], [class~='text-red-300'], [class~='text-red-400']) { color: var(--red); }
 .iaero-sweeper :is([class~='text-blue-400'], [class~='text-purple-400'], [class~='text-purple-300']) { color: var(--blue); }
 .iaero-sweeper :is([class~='border-slate-800/50'], [class~='border-slate-700/50'], [class~='border-slate-700'], [class~='border-slate-600/50'], [class~='border-slate-600']) { border-color: var(--line); }
@@ -206,6 +206,44 @@ input[type='number'] { -moz-appearance: textfield; }
 .iaero-sweeper main .font-mono { font-variant-numeric: tabular-nums; }
 .iaero-sweeper :is([class~='max-h-[80vh]'], [class~='max-h-[90vh]']) { max-height: min(90svh, calc(100svh - 32px)); }
 .glass { background: var(--surface); border: 1px solid var(--line); }
+
+/* Financial estimates keep their amber meaning in both themes. */
+.iaero-sweeper :is(.sweep-estimate, .sweep-estimate-note) { color: var(--amber); }
+
+/* The native modal is in the top layer. Its header and summaries scroll with
+   the table so they cannot consume the action area on a short viewport. */
+.sweep-dialog {
+  width: min(42rem, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px);
+  max-height: calc(100dvh - 24px);
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  box-shadow: 0 24px 80px #041c4c30;
+}
+.sweep-dialog[open] { display: flex; flex-direction: column; }
+.sweep-dialog::backdrop { background: #07101fb3; }
+.sweep-dialog-scroll { min-height: 0; min-width: 0; flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; }
+.sweep-dialog-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 20px; border-bottom: 1px solid var(--line); }
+.sweep-dialog-heading { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.sweep-dialog-leading { flex: none; }
+.sweep-dialog-heading-text { min-width: 0; }
+.sweep-dialog-heading h2 { margin: 0; color: var(--ink-strong); font-size: 20px; font-weight: 700; line-height: 1.35; letter-spacing: -.035em; overflow-wrap: anywhere; }
+.sweep-dialog-heading p { margin: 5px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.sweep-dialog-close { display: inline-flex; justify-content: center; align-items: center; flex: none; width: 44px; height: 44px; padding: 10px; color: var(--muted-dark); background: transparent; border: 1px solid var(--line); border-radius: 10px; }
+.sweep-dialog-close:not(:disabled):hover { color: var(--ink-strong); background: var(--surface-soft); }
+.sweep-dialog-close:disabled { opacity: .5; }
+.sweep-dialog-body { min-width: 0; overflow-wrap: anywhere; }
+.sweep-dialog-table { min-width: 0; overflow-x: auto; }
+.sweep-dialog-footer { flex: 0 0 auto; max-height: min(12rem, 45vh); max-height: min(12rem, 45dvh); overflow: auto; overscroll-behavior: contain; padding: 16px; border-top: 1px solid var(--line); background: var(--surface-soft); }
+.sweep-dialog-actions { display: flex; align-items: stretch; gap: 12px; }
+.sweep-dialog-actions > button { flex: 1 1 0; min-width: 0; min-height: 44px; overflow-wrap: anywhere; }
+.sweep-dialog-footer button { min-height: 44px; }
 
 @media (max-width: 1020px) {
   .sweeper-product-name, .sweeper-header-docs { display: none; }

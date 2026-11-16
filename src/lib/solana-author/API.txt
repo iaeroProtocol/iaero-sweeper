@@ -1,0 +1,88 @@
+Solana Medium remediation — isolated author scope
+
+Guarded Pages paths (Next fallbacks are inert503):
+GET /api/solana/status
+POST /api/solana/discover {wallet}
+POST /api/solana/quote {wallet,inputMint,outputMint,amount,slippageBps}
+POST /api/solana/construct {intent,quote}
+POST /api/solana/reconcile {account,signature,blockhash,lastValidBlockHeight}
+
+Pure parsing, including semantic review age/minimum/consent checks for construct,
+precedes mandatory shared D1 admission. Existing schema and global/client quotas
+are unchanged: discover weight12, construct prices weight2, other operations quote
+weight1. Discover makes at most6 HTTP calls (3 DAS pages of100 plus3 classic ATA
+balance batches). Other routes make1 HTTP call; construct makes2. RPC methods
+are fixed read-only methods. No provider URL, key, body or raw error is returned.
+One whole8s upstream deadline, bounded response bytes, manual redirects, no retry.
+Streamed inbound JSON cap32KiB with1s body deadline. Any invalid/body/cheap semantic
+failure makes no SQL reservation and reads no provider binding.
+
+Server uses existing HELIUS_API_KEY and existing public configured fee wallet
+7gC6tTQVFUTu2toG93nhtqx9ESvRZyHpRTY67dQksSZM (optional explicit server-name alias).
+No browser credentials. Fee remains5bps on output. Existing classic initialized
+fee ATA must bind correct mint and token owner. Operator public proof establishes
+USDC ATA Bbw22p1sbXcerJdDCu4qVyTGUutKCc8dxvNfUXkbby4A; helper rechecks fresh.
+WSOL fee ATA is absent, so WSOL is explicitly unavailable until separately set up.
+No fee account is created by the app. Native SOL remains untouched except normal
+network fees and optional idempotent creation of the user's own output ATA.
+One fixed compute budget:1.4m units,1000 microLamports per unit. No Jito tips.
+
+Supported execution: classic SPL associated token accounts, exact-input direct
+Jupiter V1 route, Whirlpool or Meteora DLMM only. Quote requests explicitly use
+instructionVersion=V1, dexes=Whirlpool,Meteora DLMM, onlyDirectRoutes=true.
+Unknown/new/shared/ledger/Token2022/native-wrap/other instruction families are
+held with a supported-route error, never signed. No opaque serialized provider
+transaction is forwarded. Provider setup/compute/lookup tables are not compiled.
+Client builds fixed compute instructions, at most its own canonical output ATA
+creation, then one validated Jupiter instruction. All executable account keys are
+limited to SPL/Jupiter/the authenticated DEX program. Quote pool must be owned by
+that DEX. Foreign owned-token accounts are rejected during fresh construction.
+Readonly duplicate wallet authority is allowed only at the exact primary-IDL
+DEX position (Whirlpool11 / Meteora20); extra signer/writable duplicates fail.
+
+Review records bind original account, full mainnet genesis hash, mints, decimals,
+exact raw cap, original net minimum, original impact, quote time and explicit risk
+acceptance. UI preview additionally binds account/output/selection/custom caps;
+a scope change closes it and stale async preview cannot publish. Confirmation
+cannot rebind an old review to a newly connected wallet. Fresh quote, construct,
+local validation and read-only simulation precede each signer. No wider dynamic
+slippage: risk acceptance accepts the reviewed impact and keeps the original floor.
+New impact above max(5%,original accepted impact) or a weaker minimum requires a
+new review. Jupiter priceImpactPct is a fraction:0.01 means1%,1 means100%.
+Jupiter documents outAmount net of AMM/platform fees and threshold after slippage.
+Authentic response can ceil the threshold by1 raw unit. After original provider
+bytes exactly bind quote, local compilation tightens only decoded quotedOutAmount
+by at most2 raw units so conservative floor arithmetic still protects the exact
+original minimum. Provider captures and displayed quote amounts are unchanged.
+
+Durability: shared native Web Lock held over the workflow (no fallback lease).
+Owner/mainnet-scoped localStorage journal is persisted and read back before the
+signer. Signed message must be identical. Original signed wire, derived signature,
+blockhash and lastValidBlockHeight are saved before send. maxRetries0 and preflight
+enabled. Unknown send/confirmation or ambiguous hashless signer response keeps
+marker and stops queue. Reload cannot create another trade while marker exists.
+Reconcile queries original context and finalized canonical transaction. Success
+requires full original signed bytes plus exact input debit and minimum output
+credit; totals are actual finalized token units, never quoted amounts. Finalized
+failure may clear. Absent receipt/expired blockhash alone does not auto-clear;
+expired-unresolved and hashless ambiguity remain manual holds with no retry.
+
+Primary references:
+https://github.com/jup-ag/jupiter-cpi/blob/main/idl.json
+Git blob5018becdfb4006d8f8ab058b54fec7d686892e5e, Apache-2.0; vendored narrow
+instructions/types in solana-jupiter-idl.json, including exact DEX account order.
+https://github.com/orca-so/whirlpools/blob/main/programs/whirlpool/src/lib.rs
+Git blob36196253a7e30315d7bb8d84ef6d268fa245de5d; declare_id Whirlpool program.
+https://github.com/MeteoraAg/dlmm-sdk/blob/main/ts-client/src/dlmm/constants/index.ts
+Git blobad27f713dc0a424c5e0120f688f6173fc37b9df5; mainnet DLMM program.
+https://developers.jup.ag/docs/guides/how-to-build-a-custom-swap-with-metis
+Current official guide: fraction impact, net output, V1 default/V2 feature scope.
+https://developers.jup.ag/docs/swap/v1/add-fees-to-swap
+Fee account must already be initialized and belong to input/output pair.
+
+Tests are repository-contained synthetic fake-wallet/provider tests plus copied
+public unsigned instruction/account-proof fixtures. Fixture tests use fixed
+captured time, do not pretend old quotes are current, and never submit them.
+No authenticated provider/key check, real signer, send, hosted mutation or build
+was performed by this author. Root's full integration, authenticated availability
+if authorized, fresh independent review and release decision remain separate.

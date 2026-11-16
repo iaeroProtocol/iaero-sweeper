@@ -22,12 +22,14 @@
 
 'use client';
 
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { BrandHeader, BrandFooter } from '@/components/brand';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { PublicKey, VersionedTransaction } from '@solana/web3.js';
+import {createSolanaReview, jupiterImpactPercent, SOLANA_MAINNET} from '@/lib/solana-intent';
+import {readSolanaPending, type SolanaPending} from '@/lib/solana-pending';
 import {
   Wallet,
   RefreshCw,
@@ -60,6 +62,7 @@ import {
   unhideToken,
   clearUserHiddenTokens,
   calculateDynamicSlippage,
+  getSolanaStatus, recoverSolanaPending, type SolanaStatus,
 } from './solana-swap';
 
 // ============================================================================
@@ -103,6 +106,9 @@ interface FailedQuoteItem {
 }
 
 interface QuotePreviewData {
+  account: string;
+  network: typeof SOLANA_MAINNET;
+  scope: string;
   quotes: QuotePreviewItem[];
   failedQuotes: FailedQuoteItem[];
   outputToken: 'USDC' | 'SOL';
@@ -116,7 +122,7 @@ interface SwapResultDetail {
   inputValueUsd: number;
   quotedOutputUsd: number;
   priceImpactPct: number;
-  status: 'success' | 'failed' | 'skipped';
+  status: 'success' | 'failed' | 'skipped' | 'pending';
   error?: string;
   signature?: string;
 }
@@ -140,7 +146,15 @@ function formatNumber(num: number, decimals: number = 2): string {
   return `${(num / 1000000).toFixed(2)}M`;
 }
 
+function exactTokenUnits(amount: bigint, decimals: number): string {
+  const digits = amount.toString().padStart(decimals + 1, '0');
+  if (!decimals) return digits;
+  const fraction = digits.slice(-decimals).replace(/0+$/, '');
+  return digits.slice(0, -decimals) + (fraction ? '.' + fraction : '');
+}
+
 function formatUSD(value: number): string {
+  if (value <= 0) return 'Unpriced';
   if (value < 0.01) return '< $0.01';
   return `$${formatNumber(value)}`;
 }
@@ -157,6 +171,22 @@ export default function SolanaSweeperPage() {
   // Wallet state
   const { publicKey, connected, signTransaction, signAllTransactions } = useWallet();
   const { connection } = useConnection();
+  const walletScope = useRef<string | null>(null);
+  walletScope.current = publicKey?.toBase58() ?? null;
+  const [capability, setCapability] = useState<SolanaStatus | null>(null);
+  const [capabilityError, setCapabilityError] = useState('Checking guarded Solana service...');
+  const [pending, setPending] = useState<SolanaPending | null>(null);
+  const [pendingProblem, setPendingProblem] = useState<string | null>(null);
+  const refreshCapability = useCallback(async () => {
+    try { const result = await getSolanaStatus(); setCapability(result); setCapabilityError(result.reason ?? ''); }
+    catch (e) { setCapability(null); setCapabilityError(e instanceof Error ? e.message : 'Solana service is unavailable.'); }
+  }, []);
+  useEffect(() => { void refreshCapability(); }, [refreshCapability]);
+  useEffect(() => {
+    const read = () => { try { setPending(publicKey ? readSolanaPending(localStorage, publicKey.toBase58())?.record ?? null : null); setPendingProblem(null); }
+      catch { setPendingProblem('Saved Solana request cannot be verified. Preserve browser storage and reconcile it before another swap.'); } };
+    read(); window.addEventListener('storage', read); return () => window.removeEventListener('storage', read);
+  }, [publicKey]);
 
   // Hydration fix
   const [mounted, setMounted] = useState(false);
@@ -187,6 +217,7 @@ export default function SolanaSweeperPage() {
     successful: number;
     failed: number;
     totalValue: number;
+    outputSymbol: string;
     signatures: string[];
   } | null>(null);
   const [detailedResults, setDetailedResults] = useState<SwapResultDetail[]>([]);
@@ -202,16 +233,22 @@ export default function SolanaSweeperPage() {
   const outputConfig = useMemo(() => {
     return outputToken === 'USDC' 
       ? { mint: SOLANA_TOKENS.USDC, decimals: 6, symbol: 'USDC' }
-      : { mint: SOLANA_TOKENS.SOL, decimals: 9, symbol: 'SOL' };
+      : { mint: SOLANA_TOKENS.SOL, decimals: 9, symbol: 'WSOL' };
   }, [outputToken]);
+
+  const quoteScope = JSON.stringify([publicKey?.toBase58() ?? null, SOLANA_MAINNET, outputConfig.mint,
+    tokens.filter(t => selectedTokens.has(t.mint)).map(t => [t.mint, t.balance.toString(), t.decimals, tokenAmounts.get(t.mint) ?? 100]).sort((a,b) => String(a[0]).localeCompare(String(b[0])))]);
+  const quoteScopeRef = useRef(quoteScope); quoteScopeRef.current = quoteScope;
+  useEffect(() => { setShowQuotePreview(false); setQuotePreviewData(null); }, [quoteScope]);
+  const outputReady = capability?.outputs.some(o => o.mint === outputConfig.mint && o.ready) === true;
 
   // ============================================================================
   // TOKEN SCANNING
   // ============================================================================
 
   const scanWalletTokens = useCallback(async () => {
-    if (!publicKey) return;
-    
+    if (!publicKey || !capability?.ready || isProcessing) return;
+    const scanAccount = publicKey.toBase58();
     setIsScanning(true);
     setError(null);
     setTokens([]);
@@ -226,9 +263,11 @@ export default function SolanaSweeperPage() {
       
       const discoveredTokens = await discoverSolanaTokens(
         publicKey.toString(),
-        0.10 // Min $0.10 value
+        0, // Positive holdings are visible regardless of price.
+        notice => setError(notice)
       );
       
+      if (walletScope.current !== scanAccount) return;
       setTokens(discoveredTokens);
       
       // Select only tradeable tokens by default (except output token)
@@ -247,7 +286,7 @@ export default function SolanaSweeperPage() {
     } finally {
       setIsScanning(false);
     }
-  }, [publicKey, outputConfig.mint]);
+  }, [publicKey, outputConfig.mint, capability?.ready, isProcessing]);
 
   // Track previous wallet to detect changes
   const [prevWallet, setPrevWallet] = useState<string | null>(null);
@@ -257,7 +296,7 @@ export default function SolanaSweeperPage() {
     if (connected && publicKey) {
       const currentWallet = publicKey.toString();
       
-      if (prevWallet !== currentWallet) {
+      if (capability?.ready && prevWallet !== currentWallet) {
         console.log(`🔄 Wallet changed: ${prevWallet?.slice(0, 8) || 'none'} → ${currentWallet.slice(0, 8)}`);
         setPrevWallet(currentWallet);
         
@@ -278,7 +317,7 @@ export default function SolanaSweeperPage() {
       setSwapResults(null);
       setDetailedResults([]);
     }
-  }, [connected, publicKey, scanWalletTokens, prevWallet]);
+  }, [connected, publicKey, scanWalletTokens, prevWallet, capability?.ready]);
 
   // Remove output token from selection when it changes
   useEffect(() => {
@@ -294,7 +333,9 @@ export default function SolanaSweeperPage() {
   // ============================================================================
 
   const fetchQuotesAndShowPreview = useCallback(async () => {
-    if (!publicKey || selectedTokens.size === 0) return;
+    if (!publicKey || selectedTokens.size === 0 || !outputReady || pending || pendingProblem) return;
+    const previewAccount = publicKey.toBase58();
+    const previewScope = quoteScopeRef.current;
     
     setIsProcessing(true);
     setError(null);
@@ -335,22 +376,15 @@ export default function SolanaSweeperPage() {
       const quotes = await getJupiterQuotesBatched(
         tokensWithCustomAmounts,
         outputConfig.mint,
-        100, // Base slippage (dynamic will be applied at execution)
-        setProgressStep
+        100, // Fixed reviewed1% output slippage
+        setProgressStep,
+        previewAccount
       );
       
-      // Get output token price (for SOL)
-      let outputPrice = 1;
-      if (outputToken === 'SOL') {
-        try {
-          const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
-          const data = await res.json();
-          outputPrice = data.solana?.usd || 150;
-        } catch {
-          outputPrice = 150;
-        }
-      }
-      
+      // Quote outputs remain token units, never a hardcoded USD peg.
+      const outputPrice = 0;
+      if (walletScope.current !== previewAccount || quoteScopeRef.current !== previewScope) throw new Error('Wallet, output or selected amount changed. Review again.');
+
       const successfulQuotes: QuotePreviewItem[] = [];
       const failedQuotes: FailedQuoteItem[] = [];
       
@@ -359,7 +393,7 @@ export default function SolanaSweeperPage() {
         const percentage = tokenAmounts.get(token.mint) ?? 100;
         
         if (quote) {
-          const priceImpactPct = parseFloat(quote.priceImpactPct || '0');
+          const priceImpactPct = jupiterImpactPercent(quote);
           const outputAmount = Number(quote.outAmount) / (10 ** outputConfig.decimals);
           const quotedOutputUsd = outputAmount * outputPrice;
           const slippageBps = calculateDynamicSlippage(priceImpactPct, false);
@@ -371,7 +405,7 @@ export default function SolanaSweeperPage() {
             quotedOutputUsd,
             priceImpactPct,
             slippageBps,
-            selected: priceImpactPct < 10, // Auto-deselect >10% impact
+            selected: priceImpactPct <= 5, // Higher impact requires explicit per-token acceptance.
             forceHighSlippage: false,
             percentage,
           });
@@ -387,6 +421,7 @@ export default function SolanaSweeperPage() {
       successfulQuotes.sort((a, b) => b.inputValueUsd - a.inputValueUsd);
       
       setQuotePreviewData({
+        account: previewAccount, network: SOLANA_MAINNET, scope: previewScope,
         quotes: successfulQuotes,
         failedQuotes,
         outputToken,
@@ -402,7 +437,7 @@ export default function SolanaSweeperPage() {
       setIsProcessing(false);
       setProgressStep('');
     }
-  }, [publicKey, selectedTokens, tokens, outputConfig, outputToken, tokenAmounts]);
+  }, [publicKey, selectedTokens, tokens, outputConfig, outputToken, tokenAmounts, outputReady, pending, pendingProblem]);
 
   // Toggle quote selection
   const toggleQuoteSelection = useCallback((mint: string) => {
@@ -447,7 +482,10 @@ export default function SolanaSweeperPage() {
   // ============================================================================
 
   const executeConfirmedSwaps = useCallback(async () => {
-    if (!publicKey || !signTransaction || !quotePreviewData) return;
+    if (!publicKey || !signTransaction || !quotePreviewData || pending || pendingProblem || !outputReady) return;
+    const executionAccount = publicKey.toBase58();
+    const executionScope = quotePreviewData.scope;
+    if (quotePreviewData.account !== executionAccount || quotePreviewData.network !== SOLANA_MAINNET || quotePreviewData.scope !== quoteScopeRef.current || quotePreviewData.outputToken !== outputToken) { setError('Output changed. Review a new quote.'); return; }
     
     const selectedQuotes = quotePreviewData.quotes.filter(q => q.selected);
     
@@ -460,7 +498,7 @@ export default function SolanaSweeperPage() {
     );
     
     if (executableQuotes.length === 0) {
-      setError('All selected tokens have >5% impact and require "Force" to be enabled');
+      setError('All selected tokens have >5% impact and require explicit risk acceptance');
       return;
     }
     
@@ -481,7 +519,7 @@ export default function SolanaSweeperPage() {
         quotedOutputUsd: sq.quotedOutputUsd,
         priceImpactPct: sq.priceImpactPct,
         status: 'skipped',
-        error: `${sq.priceImpactPct.toFixed(1)}% impact requires "Force" to swap`
+        error: `${sq.priceImpactPct.toFixed(1)}% impact requires explicit risk acceptance`
       });
     }
     
@@ -499,15 +537,19 @@ export default function SolanaSweeperPage() {
         publicKey,
         connection,
         signTransaction as (tx: VersionedTransaction) => Promise<VersionedTransaction>,
-        100, // Base slippage (dynamic is applied internally)
+        100, // Base slippage (reviewed output minimum is immutable)
         setProgressStep,
-        signAllTransactions as ((txs: VersionedTransaction[]) => Promise<VersionedTransaction[]>) | undefined
+        undefined,
+        {reviews: executableQuotes.map(q => createSolanaReview(executionAccount, q.quote, q.token.decimals, outputConfig.decimals, q.forceHighSlippage)),
+          assertActive: () => { if (walletScope.current !== executionAccount || quoteScopeRef.current !== executionScope) throw new Error('Wallet, output or cap changed. Original request must be reconciled before retrying.'); },
+          onPending: value => { if (walletScope.current === executionAccount) setPending(value); }}
       );
       
-      // Calculate total output value
+      if (walletScope.current !== executionAccount) throw new Error('Wallet changed. Check the original wallet request before retrying.');
+      // Calculate actual finalized output units
       const { outputPrice } = quotePreviewData;
       const totalOutputNum = Number(result.totalOutputAmount) / (10 ** outputConfig.decimals);
-      const totalValueUsd = totalOutputNum * outputPrice;
+      const totalValueUsd = totalOutputNum; // Actual finalized output units; no invented USD valuation.
       
       // Build detailed results
       for (const sq of executableQuotes) {
@@ -531,7 +573,8 @@ export default function SolanaSweeperPage() {
             inputValueUsd: sq.inputValueUsd,
             quotedOutputUsd: sq.quotedOutputUsd,
             priceImpactPct: sq.priceImpactPct,
-            status: 'failed',
+            status: failResult.status,
+            signature: failResult.signature,
             error: failResult.error || 'Unknown error'
           });
         }
@@ -555,12 +598,13 @@ export default function SolanaSweeperPage() {
         successful: result.successful.length,
         failed: result.failed.length,
         totalValue: totalValueUsd,
+        outputSymbol: outputConfig.symbol,
         signatures: [...new Set(result.successful.map(r => r.signature).filter(Boolean) as string[])]
       });
       setShowResultsModal(true);
       
       // Refresh token list
-      await scanWalletTokens();
+      if (!result.pending) await scanWalletTokens();
       
     } catch (err: any) {
       console.error('Swap error:', err);
@@ -570,7 +614,7 @@ export default function SolanaSweeperPage() {
       setProgressStep('');
       setQuotePreviewData(null);
     }
-  }, [publicKey, signTransaction, signAllTransactions, quotePreviewData, outputConfig, connection, scanWalletTokens]);
+  }, [publicKey, signTransaction, quotePreviewData, outputConfig, outputToken, connection, scanWalletTokens, pending, pendingProblem, outputReady]);
 
   // ============================================================================
   // COMPUTED VALUES
@@ -676,11 +720,9 @@ export default function SolanaSweeperPage() {
                   </p>
                 </div>
                 <div className="bg-slate-900/50 rounded-lg p-3">
-                  <p className="text-xs text-slate-400">You'll Receive</p>
+                  <p className="text-xs text-slate-400">Quoted output (net5bps fee)</p>
                   <p className="text-lg font-bold text-purple-400">
-                    {formatUSD(quotePreviewData.quotes
-                      .filter(q => q.selected)
-                      .reduce((sum, q) => sum + q.quotedOutputUsd, 0))}
+                    {formatNumber(quotePreviewData.quotes.filter(q => q.selected).reduce((sum, q) => sum + Number(q.quote.outAmount) / 10 ** quotePreviewData.outputDecimals, 0), 6)} {quotePreviewData.outputToken === 'SOL' ? 'WSOL' : 'USDC'}
                   </p>
                 </div>
                 <div className="bg-slate-900/50 rounded-lg p-3">
@@ -705,6 +747,7 @@ export default function SolanaSweeperPage() {
               </div>
             </div>
             
+            <p className="px-4 text-xs text-slate-400">The0.05% platform fee is included. SOL pays network fees and any required output token account rent.</p>
             {/* Quote List */}
             <div className="overflow-y-auto max-h-[400px] p-4">
               <table className="w-full">
@@ -750,9 +793,11 @@ export default function SolanaSweeperPage() {
                       </td>
                       <td className="py-3 text-right">
                         <span className="text-slate-300">{formatUSD(q.inputValueUsd)}</span>
+                        <div className="max-w-[120px] break-all text-xs text-slate-400" title={`${q.token.balance} raw units`}>{exactTokenUnits(q.token.balance, q.token.decimals)} {q.token.symbol}</div>
                       </td>
                       <td className="py-3 text-right">
-                        <span className="text-purple-400 font-medium">{formatUSD(q.quotedOutputUsd)}</span>
+                        <span className="text-purple-400 font-medium">{formatNumber(Number(q.quote.outAmount) / 10 ** quotePreviewData.outputDecimals, 6)} {quotePreviewData.outputToken === 'SOL' ? 'WSOL' : 'USDC'}</span>
+                        <div className="max-w-[120px] break-all text-xs text-slate-400">Min {exactTokenUnits(BigInt(q.quote.otherAmountThreshold), quotePreviewData.outputDecimals)}</div>
                       </td>
                       <td className="py-3 text-right pr-2">
                         <div className="flex items-center justify-end gap-2">
@@ -773,9 +818,9 @@ export default function SolanaSweeperPage() {
                               }`}
                               title={q.forceHighSlippage 
                                 ? `Slippage: ${q.slippageBps}bps` 
-                                : 'Click to allow higher slippage'}
+                                : 'Accept this reviewed price impact; the original output floor stays fixed'}
                             >
-                              {q.forceHighSlippage ? '⚠️ Forced' : 'Force'}
+                              {q.forceHighSlippage ? '⚠️ Accepted' : 'Accept risk'}
                             </button>
                           )}
                         </div>
@@ -820,14 +865,14 @@ export default function SolanaSweeperPage() {
                   <AlertTriangle className="w-4 h-4" />
                   <span className="text-sm font-medium">
                     {quotePreviewData.quotes.some(q => q.selected && q.priceImpactPct > 5 && !q.forceHighSlippage) 
-                      ? <>High-impact tokens ({quotePreviewData.quotes.filter(q => q.selected && q.priceImpactPct > 5 && !q.forceHighSlippage).length}) require "Force" to swap.</>
+                      ? <>High-impact tokens ({quotePreviewData.quotes.filter(q => q.selected && q.priceImpactPct > 5 && !q.forceHighSlippage).length}) require explicit risk acceptance.</>
                       : <>Some tokens have &gt;5% price impact.</>
                     }
                   </span>
                 </div>
                 {quotePreviewData.quotes.some(q => q.selected && q.forceHighSlippage) && (
                   <div className="mt-2 text-xs text-orange-400">
-                    ⚠️ Force enabled for {quotePreviewData.quotes.filter(q => q.selected && q.forceHighSlippage).length} token(s) - higher slippage will be used
+                    ⚠️ Risk acceptance enabled for {quotePreviewData.quotes.filter(q => q.selected && q.forceHighSlippage).length} token(s) - reviewed impact accepted; original output minimum stays fixed
                   </div>
                 )}
               </div>
@@ -905,9 +950,9 @@ export default function SolanaSweeperPage() {
                   </p>
                 </div>
                 <div className="bg-slate-900/50 rounded-lg p-3">
-                  <p className="text-xs text-slate-400">Received</p>
+                  <p className="text-xs text-slate-400">Finalized received</p>
                   <p className="text-lg font-bold text-purple-400">
-                    {formatUSD(swapResults.totalValue)}
+                    {formatNumber(swapResults.totalValue, 6)} {swapResults.outputSymbol}
                   </p>
                 </div>
                 <div className="bg-slate-900/50 rounded-lg p-3">
@@ -983,7 +1028,7 @@ export default function SolanaSweeperPage() {
                       </td>
                       <td className="py-3 text-right">
                         {result.status === 'success' ? (
-                          <span className="text-purple-400 font-medium">{formatUSD(result.quotedOutputUsd)}</span>
+                          <span className="text-purple-400 font-medium"><span className="text-xs text-slate-400">See finalized transaction</span></span>
                         ) : (
                           <span className="text-slate-500">—</span>
                         )}
@@ -1047,8 +1092,8 @@ export default function SolanaSweeperPage() {
             Sweep Solana tokens.
           </h1>
           <p className="text-slate-400 max-w-xl mx-auto">
-            Convert multiple SPL tokens to USDC or SOL using Jupiter aggregator.
-            Preview quotes and manage slippage before executing.
+            Convert verified classic SPL tokens to USDC using direct Jupiter routes. Native SOL stays available for gas.
+            Review exact amounts, minimum outputs and price impact before signing.
           </p>
         </motion.div>
 
@@ -1059,6 +1104,23 @@ export default function SolanaSweeperPage() {
           transition={{ delay: 0.1 }}
           className="sweeper-panel bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl overflow-hidden"
         >
+          {(!capability?.ready || !outputReady) && <div role="status" className="mb-4 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-100">
+            {capabilityError || capability?.outputs.find(o => o.mint === outputConfig.mint)?.reason || 'This output is unavailable until its existing fee account is verified.'}
+            <button type="button" className="ml-3 underline" onClick={() => void refreshCapability()}>Check service again</button>
+          </div>}
+          {(pending || pendingProblem) && <div role="alert" className="mb-4 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-100">
+            <p>{pendingProblem || 'Original Solana wallet request is pending or its outcome is unknown. New swaps are blocked, including after reload.'}</p>
+            {pending?.signature && <a className="block underline" target="_blank" rel="noreferrer" href={`${EXPLORER_URL}/tx/${pending.signature}`}>View original transaction</a>}
+            <button type="button" disabled={isProcessing || !publicKey} className="mt-2 underline disabled:opacity-50" onClick={async () => {
+              if (!publicKey) return; const account = publicKey.toBase58(); setIsProcessing(true);
+              try { const result = await recoverSolanaPending(account, {assertActive: () => { if (walletScope.current !== account) throw new Error('Wallet changed.'); }, onPending: setPending});
+                if (result.state === 'confirmed' || result.state === 'failed') setError(`Original transaction ${result.state} on the finalized chain. Review remaining balances again.`);
+                else setError(result.state === 'expired-unresolved' ? 'Original blockhash expired, but receipt absence is not proof of no submission. Keep this request saved for manual reconciliation; do not retry.' : 'Original outcome is still unknown. Keep the saved request and check again.');
+              } catch (e) { setError(e instanceof Error ? e.message : 'Original transaction status is unavailable.'); }
+              finally { setIsProcessing(false); }
+            }}>Reconcile original request</button>
+          </div>}
+
           {/* Not Connected State */}
           {!connected && (
             <div className="p-12 text-center">
@@ -1080,7 +1142,7 @@ export default function SolanaSweeperPage() {
                   {/* Scan Button */}
                   <button
                     onClick={scanWalletTokens}
-                    disabled={isScanning || isProcessing}
+                    disabled={isScanning || isProcessing || !capability?.ready}
                     className="flex items-center gap-2 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-medium transition"
                   >
                     {isScanning ? (
@@ -1101,7 +1163,7 @@ export default function SolanaSweeperPage() {
                         clearUserHiddenTokens();
                         setUserHidden(new Set());
                       }}
-                      disabled={isScanning || isProcessing}
+                      disabled={isScanning || isProcessing || !capability?.ready}
                       className="flex items-center gap-2 px-3 py-2.5 bg-orange-600/20 hover:bg-orange-600/30 text-orange-300 border border-orange-500/30 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl text-sm font-medium transition"
                       title="Unhide all user-hidden tokens"
                     >
@@ -1114,6 +1176,7 @@ export default function SolanaSweeperPage() {
                   <div className="flex items-center gap-2 bg-slate-900/50 rounded-xl p-1">
                     <button
                       onClick={() => setOutputToken('USDC')}
+                      disabled={isProcessing}
                       className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
                         outputToken === 'USDC'
                           ? 'bg-blue-600 text-white'
@@ -1124,13 +1187,15 @@ export default function SolanaSweeperPage() {
                     </button>
                     <button
                       onClick={() => setOutputToken('SOL')}
+                      disabled={!capability?.outputs.some(o => o.mint === SOLANA_TOKENS.SOL && o.ready) || isProcessing}
+                      title="Wrapped SOL requires an existing verified5bps fee token account"
                       className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
                         outputToken === 'SOL'
                           ? 'bg-purple-600 text-white'
                           : 'text-slate-400 hover:text-white'
                       }`}
                     >
-                      → SOL
+                      {capability?.outputs.some(o => o.mint === SOLANA_TOKENS.SOL && o.ready) ? '→ WSOL' : '→ WSOL (unavailable)'}
                     </button>
                   </div>
 
@@ -1504,7 +1569,7 @@ export default function SolanaSweeperPage() {
 
                   <button
                     onClick={fetchQuotesAndShowPreview}
-                    disabled={isProcessing || selectedCount === 0}
+                    disabled={isProcessing || selectedCount === 0 || !outputReady || !!pending || !!pendingProblem}
                     className="w-full py-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-semibold text-lg transition flex items-center justify-center gap-2"
                   >
                     {isProcessing ? (
@@ -1554,21 +1619,21 @@ export default function SolanaSweeperPage() {
             <Coins className="w-6 h-6 text-purple-400 mb-2" />
             <h3 className="font-medium text-white mb-1">Batch Swaps</h3>
             <p className="text-sm text-slate-400">
-              Multiple swaps executed in parallel for speed
+              One swap at a time. An unresolved wallet request stops the queue.
             </p>
           </div>
           <div className="p-4 bg-slate-800/30 backdrop-blur border border-slate-700/50 rounded-xl">
             <Zap className="w-6 h-6 text-blue-400 mb-2" />
             <h3 className="font-medium text-white mb-1">Jupiter Aggregator</h3>
             <p className="text-sm text-slate-400">
-              Best routes across all Solana DEXs
+              Direct Whirlpool and Meteora DLMM routes for verified classic SPL tokens.
             </p>
           </div>
           <div className="p-4 bg-slate-800/30 backdrop-blur border border-slate-700/50 rounded-xl">
             <RefreshCw className="w-6 h-6 text-pink-400 mb-2" />
-            <h3 className="font-medium text-white mb-1">Dynamic Slippage</h3>
+            <h3 className="font-medium text-white mb-1">Protected Minimum</h3>
             <p className="text-sm text-slate-400">
-              Slippage auto-adjusts based on price impact
+              The reviewed1% slippage minimum stays fixed. Higher price impact needs explicit acceptance.
             </p>
           </div>
         </div>

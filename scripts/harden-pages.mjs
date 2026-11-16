@@ -22,7 +22,8 @@ export async function hardenPages({projectRoot=root, output='.vercel/output/stat
     stdin: {contents: `import {withDiscoveryGuard} from './edge/pages-dispatch.mjs';
 import {discoverTokens,parseQuoteRequest,handleQuoteRequest} from './src/lib/sweeper-read-api.ts';
 import {parsePriceRequest,handlePriceRequest} from './src/lib/coingecko-read-api.ts';
-export const guardPages = nextWorker => withDiscoveryGuard(nextWorker,{discoverTokens,parseQuoteRequest,handleQuoteRequest,parsePriceRequest,handlePriceRequest});`,
+import {parseSolanaRequest,handleSolanaRequest} from './src/lib/solana-read-api.ts';
+export const guardPages = nextWorker => withDiscoveryGuard(nextWorker,{discoverTokens,parseQuoteRequest,handleQuoteRequest,parsePriceRequest,handlePriceRequest,parseSolanaRequest,handleSolanaRequest});`,
       resolveDir:projectRoot,sourcefile:'iaero-discovery-entry.mjs',loader:'js'},
     absWorkingDir:projectRoot,bundle:true,format:'esm',platform:'browser',target:'es2022',
     sourcemap:false,minify:false,write:false,legalComments:'none',

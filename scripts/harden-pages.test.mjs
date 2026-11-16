@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,readFile,writeFile,rm,copyFile} from 'node:fs/promises';
+import {mkdtemp,mkdir,readFile,writeFile,rm,copyFile,symlink} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -15,6 +15,9 @@ async function fixture(run) {
       await mkdir(path.dirname(path.join(projectRoot,file)),{recursive:true});
       await copyFile(path.join(app,file),path.join(projectRoot,file));
     }
+    // Compile against the same installed, locked dependencies as the app. The
+    // isolated source fixture must not silently substitute a fake Solana SDK.
+    await symlink(path.join(app,'node_modules'),path.join(projectRoot,'node_modules'),'dir');
     const worker=path.join(projectRoot,'.vercel/output/static/_worker.js');
     await mkdir(worker,{recursive:true});
     const next="export default {fetch:()=>new Response('next route')};\n";

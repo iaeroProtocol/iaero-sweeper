@@ -42,7 +42,7 @@ test('proven pre-broadcast failures release only their unsent marker',()=>{
 });
 
 test('repricing and cancellation require the proven original sender and nonce',()=>{
- const p={version:1,account,chainId:8453,target,data:'0x12345678',value:'0',nonce:22,createdAt:1,label:'Sweep'};
+ const p={version:1,account,chainId:8453,target,data:'0x12345678',value:'0',nonce:22,nonceVerified:true,createdAt:1,label:'Sweep'};
  const tx={from:account,to:target,input:p.data,value:0n,nonce:22};
  assert.equal(pendingTransactionKind(p,tx),'intent');
  assert.equal(pendingTransactionKind(p,{...tx,to:account,input:'0x'}),'replacement');

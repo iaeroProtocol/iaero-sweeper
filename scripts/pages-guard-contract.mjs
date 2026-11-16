@@ -7,6 +7,9 @@ export const guardInputs = Object.freeze([
   'src/lib/sweeper-read-api.ts', 'src/lib/coingecko-read-api.ts',
   'src/app/api/tokens/discover/route.ts', 'src/app/api/0x/quote/route.ts',
   'src/app/api/coingecko/prices/route.ts', 'scripts/pages-guard-contract.mjs',
+  'edge/solana-api-gateway.mjs', 'src/lib/solana-read-api.ts',
+  'src/lib/solana-intent.ts', 'src/lib/solana-jupiter-idl.json',
+  'src/app/api/solana/[operation]/route.ts',
 ]);
 export const guardVersion = 'shared-d1-v2';
 export const guardEntry = `// IAERO_KEYED_API_GUARD_V2 — mandatory shared admission before every keyed read.

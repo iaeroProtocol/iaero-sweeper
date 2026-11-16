@@ -35,7 +35,7 @@ export function bind0xQuote(data: any, expected: {sellToken: Address; buyToken: 
 export interface PendingSweep {
   version: 1; account: Address; chainId: number; target: Address; data: Hex; value: '0';
   hash?: Hex; originalHash?: Hex; nonce?: number; createdBlock?: string; createdAt: number; label: string;
-  nonceBaseline?: number; nonceVerified?: boolean;
+  nonceBaseline?: number; nonceVerified?: boolean; journalId?: string;
 }
 export function pendingKey(account: Address, chainId: number) { return `iaero.sweeper.pending.v1.${chainId}.${account.toLowerCase()}`; }
 export function validatePending(value: unknown, account: Address, chainId: number): PendingSweep | null {
@@ -44,6 +44,7 @@ export function validatePending(value: unknown, account: Address, chainId: numbe
     || p.originalHash!==undefined&&!/^0x[0-9a-fA-F]{64}$/.test(p.originalHash)
     || p.nonceBaseline!==undefined&&(!Number.isSafeInteger(p.nonceBaseline)||p.nonceBaseline<0)
     || p.nonceVerified!==undefined&&typeof p.nonceVerified!=='boolean'
+    || p.journalId!==undefined&&!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(p.journalId)
     || p.nonceVerified===true&&(!Number.isSafeInteger(p.nonce)||p.nonce!<0)) return null;
   return p;
 }
@@ -52,7 +53,7 @@ export function matchesPending(p: PendingSweep, tx: {from: string; to: string | 
 }
 export function pendingTransactionKind(p: PendingSweep, tx: {from:string;to:string|null;input:string;value:bigint;nonce:number}): 'intent'|'replacement' {
   if (!sameAddress(tx.from,p.account)) throw new Error('Transaction sender does not match this wallet request.');
-  if (!Number.isSafeInteger(p.nonce) || p.nonce! < 0) throw new Error('Original nonce has not been proven. Check the original transaction first.');
+  if (p.nonceVerified !== true || !Number.isSafeInteger(p.nonce) || p.nonce! < 0) throw new Error('Original nonce has not been proven. Check the original transaction first.');
   if (tx.nonce !== p.nonce) throw new Error('Transaction nonce does not match the saved wallet request.');
   if (matchesPending(p,tx)) return 'intent';
   return 'replacement';

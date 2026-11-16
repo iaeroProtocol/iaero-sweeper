@@ -1,0 +1,327 @@
+{
+  "at": "2026-11-16T22:02:11.048Z",
+  "credentialsUsed": false,
+  "readOnly": true,
+  "walletIsUnfundedTestIdentity": true,
+  "wallet": "GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB",
+  "feeAccount": "Bbw22p1sbXcerJdDCu4qVyTGUutKCc8dxvNfUXkbby4A",
+  "quoteHttp": 200,
+  "constructHttp": 200,
+  "request": {
+    "quoteResponse": {
+      "inputMint": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+      "inAmount": "1000000",
+      "outputMint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "outAmount": "998778",
+      "otherAmountThreshold": "988791",
+      "swapMode": "ExactIn",
+      "slippageBps": 100,
+      "platformFee": {
+        "amount": "499",
+        "feeBps": 5
+      },
+      "priceImpactPct": "0.0000540512686813124399696629",
+      "routePlan": [
+        {
+          "swapInfo": {
+            "ammKey": "4fuUiYxTQ6QCrdSq9ouBYcTM7bqSwYTSyLueGZLTy4T4",
+            "label": "Whirlpool",
+            "inputMint": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+            "outputMint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            "inAmount": "1000000",
+            "outAmount": "999277",
+            "updateContextSlot": "470290994"
+          },
+          "percent": 100,
+          "bps": null
+        }
+      ],
+      "contextSlot": 470291849,
+      "timeTaken": 0.000155007,
+      "swapUsdValue": "0.999018311570796",
+      "mostReliableAmmsQuoteReport": {
+        "info": {
+          "8sjV1AqBFvFuADBCQHhotaRq5DFFYSjjg1jMyVWMqXvZ": "Amm is excluded from request's dexes_selection.",
+          "BZtgQEyS6eXUXicYPHecYQ7PybqodXQMvkjUbP4R8mUU": "Amm is excluded from request's dexes_selection."
+        }
+      },
+      "longtailMarketQuoteReport": null,
+      "useIncurredSlippageForQuoting": null,
+      "useRewards": null,
+      "otherRoutePlans": null,
+      "loadedLongtailToken": false,
+      "instructionVersion": "V1"
+    },
+    "userPublicKey": "GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB",
+    "feeAccount": "Bbw22p1sbXcerJdDCu4qVyTGUutKCc8dxvNfUXkbby4A",
+    "useSharedAccounts": false,
+    "wrapAndUnwrapSol": false,
+    "asLegacyTransaction": true,
+    "dynamicComputeUnitLimit": false,
+    "skipUserAccountsRpcCalls": true
+  },
+  "quote": {
+    "inputMint": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+    "inAmount": "1000000",
+    "outputMint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    "outAmount": "998778",
+    "otherAmountThreshold": "988791",
+    "swapMode": "ExactIn",
+    "slippageBps": 100,
+    "platformFee": {
+      "amount": "499",
+      "feeBps": 5
+    },
+    "priceImpactPct": "0.0000540512686813124399696629",
+    "routePlan": [
+      {
+        "swapInfo": {
+          "ammKey": "4fuUiYxTQ6QCrdSq9ouBYcTM7bqSwYTSyLueGZLTy4T4",
+          "label": "Whirlpool",
+          "inputMint": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+          "outputMint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+          "inAmount": "1000000",
+          "outAmount": "999277",
+          "updateContextSlot": "470290994"
+        },
+        "percent": 100,
+        "bps": null
+      }
+    ],
+    "contextSlot": 470291849,
+    "timeTaken": 0.000155007,
+    "swapUsdValue": "0.999018311570796",
+    "mostReliableAmmsQuoteReport": {
+      "info": {
+        "8sjV1AqBFvFuADBCQHhotaRq5DFFYSjjg1jMyVWMqXvZ": "Amm is excluded from request's dexes_selection.",
+        "BZtgQEyS6eXUXicYPHecYQ7PybqodXQMvkjUbP4R8mUU": "Amm is excluded from request's dexes_selection."
+      }
+    },
+    "longtailMarketQuoteReport": null,
+    "useIncurredSlippageForQuoting": null,
+    "useRewards": null,
+    "otherRoutePlans": null,
+    "loadedLongtailToken": false,
+    "instructionVersion": "V1"
+  },
+  "instructions": {
+    "tokenLedgerInstruction": null,
+    "computeBudgetInstructions": [
+      {
+        "programId": "ComputeBudget111111111111111111111111111111",
+        "accounts": [],
+        "data": "AsBcFQA="
+      }
+    ],
+    "setupInstructions": [
+      {
+        "programId": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
+        "accounts": [
+          {
+            "pubkey": "GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB",
+            "isSigner": true,
+            "isWritable": true
+          },
+          {
+            "pubkey": "7woc3ajaGMMXczFYjxon4aQoHH3j126fMUR9c58eHRsK",
+            "isSigner": false,
+            "isWritable": true
+          },
+          {
+            "pubkey": "GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB",
+            "isSigner": false,
+            "isWritable": false
+          },
+          {
+            "pubkey": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            "isSigner": false,
+            "isWritable": false
+          },
+          {
+            "pubkey": "11111111111111111111111111111111",
+            "isSigner": false,
+            "isWritable": false
+          },
+          {
+            "pubkey": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+            "isSigner": false,
+            "isWritable": false
+          }
+        ],
+        "data": "AQ=="
+      }
+    ],
+    "swapInstruction": {
+      "programId": "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
+      "accounts": [
+        {
+          "pubkey": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+          "isSigner": false,
+          "isWritable": false
+        },
+        {
+          "pubkey": "GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB",
+          "isSigner": true,
+          "isWritable": false
+        },
+        {
+          "pubkey": "FXJ6Y213C7fJdcwmDRXUtFsokkV1XAni6JwD1Jf1rxcB",
+          "isSigner": false,
+          "isWritable": true
+        },
+        {
+          "pubkey": "7woc3ajaGMMXczFYjxon4aQoHH3j126fMUR9c58eHRsK",
+          "isSigner": false,
+          "isWritable": true
+        },
+        {
+          "pubkey": "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
+          "isSigner": false,
+          "isWritable": false
+        },
+        {
+          "pubkey": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+          "isSigner": false,
+          "isWritable": false
+        },
+        {
+          "pubkey": "Bbw22p1sbXcerJdDCu4qVyTGUutKCc8dxvNfUXkbby4A",
+          "isSigner": false,
+          "isWritable": true
+        },
+        {
+          "pubkey": "D8cy77BBepLMngZx6ZukaTff5hCt1HrWyKk3Hnd9oitf",
+          "isSigner": false,
+          "isWritable": false
+        },
+        {
+          "pubkey": "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
+          "isSigner": false,
+          "isWritable": false
+        },
+        {
+          "pubkey": "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",
+          "isSigner": false,
+          "isWritable": false
+        },
+        {
+          "pubkey": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+          "isSigner": false,
+          "isWritable": false
+        },
+        {
+          "pubkey": "GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB",
+          "isSigner": false,
+          "isWritable": false
+        },
+        {
+          "pubkey": "4fuUiYxTQ6QCrdSq9ouBYcTM7bqSwYTSyLueGZLTy4T4",
+          "isSigner": false,
+          "isWritable": true
+        },
+        {
+          "pubkey": "7woc3ajaGMMXczFYjxon4aQoHH3j126fMUR9c58eHRsK",
+          "isSigner": false,
+          "isWritable": true
+        },
+        {
+          "pubkey": "4oY1eVHJrt7ywuFoQnAZwto4qcQip1QhYMAhD11PU4QL",
+          "isSigner": false,
+          "isWritable": true
+        },
+        {
+          "pubkey": "FXJ6Y213C7fJdcwmDRXUtFsokkV1XAni6JwD1Jf1rxcB",
+          "isSigner": false,
+          "isWritable": true
+        },
+        {
+          "pubkey": "4dSG9tKHZR4CAictyEnH9XuGZyKapodWXq5xyg7uFwE9",
+          "isSigner": false,
+          "isWritable": true
+        },
+        {
+          "pubkey": "FqFkv2xNNCUyx1RYV61pGZ9AMzGfgcD8uXC9zCF5JKnR",
+          "isSigner": false,
+          "isWritable": true
+        },
+        {
+          "pubkey": "A7sdy3NoAZp49cQNpreMGARAb9QJjYrrSyDALhThgk3D",
+          "isSigner": false,
+          "isWritable": true
+        },
+        {
+          "pubkey": "9opqNK3dWUijw8VNLtvne4juCTq1qADaph29tZqkoZHa",
+          "isSigner": false,
+          "isWritable": true
+        },
+        {
+          "pubkey": "3NxDBWt55DZnEwwQ2bhQ3xWG8Jd18TdUXAG4Zdr7jDai",
+          "isSigner": false,
+          "isWritable": false
+        }
+      ],
+      "data": "5RfLl3rjrSoBAAAAEQBkAAFAQg8AAAAAAHo9DwAAAAAAZAAF"
+    },
+    "cleanupInstruction": null,
+    "otherInstructions": [],
+    "addressLookupTableAddresses": [],
+    "prioritizationFeeLamports": 0,
+    "computeUnitLimit": 1400000,
+    "loadedAccountsDataSize": null,
+    "loadedAccountsDataSizeLimit": null,
+    "transactionVersion": "legacy",
+    "prioritizationType": {
+      "computeBudget": {
+        "microLamports": 0,
+        "estimatedMicroLamports": 0
+      }
+    },
+    "simulationSlot": null,
+    "dynamicSlippageReport": null,
+    "simulationError": null,
+    "addressesByLookupTableAddress": null,
+    "blockhashWithMetadata": {
+      "blockhash": [
+        23,
+        161,
+        254,
+        49,
+        191,
+        132,
+        26,
+        55,
+        190,
+        225,
+        179,
+        85,
+        83,
+        211,
+        106,
+        49,
+        211,
+        197,
+        211,
+        207,
+        255,
+        196,
+        250,
+        71,
+        2,
+        77,
+        7,
+        47,
+        125,
+        40,
+        189,
+        166
+      ],
+      "lastValidBlockHeight": 448306827,
+      "fetchedAt": {
+        "secs_since_epoch": 1794866524,
+        "nanos_since_epoch": 178979897
+      }
+    },
+    "timeTaken": 0.002480544,
+    "createAtaTimeTaken": 0.000109691
+  }
+}

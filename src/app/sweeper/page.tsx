@@ -3,12 +3,14 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BrandHeader, BrandFooter } from '@/components/brand';
+import { SweepDialog } from '@/components/sweep-dialog';
 import { AERO, SLIPPAGE_BPS, QUOTE_TTL_MS, exactAmount, minimumOutput, preserveMinimum, bind0xQuote, pendingKey, validatePending, matchesPending, pendingTransactionKind, walletReceiptOutput, isWalletRejection, isProvenNotSubmitted, mapBounded, sameAddress, type PendingSweep, type OutputToken } from '@/lib/sweep-guards';
 import type { BaseNativeQuote, BaseNativeConfig, BaseNativeClient } from '@/lib/base-native-sweep';
 import { independentPrice, currentIndependentPrice, assessQuoteValue, acceptValueRisk, quoteValueExecutable, assertRefreshedQuoteValue, type IndependentPrice, type QuoteValueQuality, type ValueRiskConsent } from '@/lib/sweep-value-quality';
 import { discoveryFailureMessage, discoveredTokenAddresses } from '@/lib/sweep-discovery-ui';
 import { inventoryHasDisplayPrice, isDisplayStock, sweepInventory } from '@/lib/sweep-inventory';
 import { bindSubmittedWalletRequest } from '@/lib/sweep-transaction-proof';
+import { acquireWalletWorkflow, createOwnedJournal, walletWorkflowKey, type WalletWorkflowLease } from '@/lib/wallet-workflow';
 import { createExecutionPriceReader } from '@/lib/sweep-execution-prices';
 import { runStockDisplayEstimates, stockDisplayValue, type StockDisplayEstimate } from '@/lib/stock-display-estimates';
 import { 
@@ -782,9 +784,27 @@ export default function TokenSweeperPage() {
   if (contextRef.current.key !== contextKey) contextRef.current = {key: contextKey, epoch: contextRef.current.epoch + 1};
   const scanEpoch = useRef(0);
   const sendLock = useRef(false);
+  const sweepDialogReturnRef = useRef<HTMLButtonElement | null>(null);
   const [journalError, setJournalError] = useState(false);
   const [pending, setPending] = useState<PendingSweep | null>(null);
   const [recoveryHash, setRecoveryHash] = useState('');
+  useEffect(() => {
+    if (!address) return;
+    const key = pendingKey(address, chainId);
+    const refresh = (event: StorageEvent) => {
+      if (event.storageArea !== localStorage || event.key !== key && event.key !== null) return;
+      try {
+        const raw = localStorage.getItem(key);
+        const record = raw ? validatePending(JSON.parse(raw), address, chainId) : null;
+        if (raw && !record) throw new Error('Invalid saved wallet request');
+        setPending(record); setJournalError(false);
+      } catch {
+        setJournalError(true); setError('Transaction history is unavailable. Check wallet activity before swapping.');
+      }
+    };
+    window.addEventListener('storage', refresh);
+    return () => window.removeEventListener('storage', refresh);
+  }, [address, chainId]);
   const scope = () => ({...contextRef.current});
   const checkScope = (captured: {key:string;epoch:number}) => {
     if (contextRef.current.key !== captured.key || contextRef.current.epoch !== captured.epoch) throw new Error('Wallet or network changed. Review again.');
@@ -1594,47 +1614,37 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
     });
   }, [quotePreviewData]);
 
-  const savePending = (record: PendingSweep | null, account: Address, network: number) => {
-    const key=pendingKey(account,network);
-    // A durable pre-submit marker is required. Storage errors hold execution.
-    if(record) localStorage.setItem(key,JSON.stringify(record)); else localStorage.removeItem(key);
+  const reflectPending = (record: PendingSweep | null, account: Address, network: number) => {
     if(contextRef.current.key===`${network}:${account.toLowerCase()}`)setPending(record);
   };
   const reconcilePending = async () => {
     if(sendLock.current||isProcessing||!pending||!publicClient||!address||chainId!==pending.chainId||!sameAddress(address,pending.account))return;
     const captured=scope();
     sendLock.current=true;setIsReconciling(true);
+    let workflow: WalletWorkflowLease | undefined;
     try {
+      workflow=await acquireWalletWorkflow(walletWorkflowKey(address,chainId));
+      checkScope(captured);
       const journalKey=pendingKey(address,chainId);
-      let journalSnapshot:string|null=JSON.stringify(pending);
-      const requireCurrentJournal=()=>{
-        checkScope(captured);
-        if(localStorage.getItem(journalKey)!==journalSnapshot)throw new Error('The saved wallet request changed. Refresh before checking it again.');
-      };
-      const saveReconciled=(value:PendingSweep|null)=>{
-        requireCurrentJournal();savePending(value,address,chainId);
-        journalSnapshot=value?JSON.stringify(value):null;
-      };
-      requireCurrentJournal();
+      const raw=JSON.stringify(pending);
+      if(localStorage.getItem(journalKey)!==raw)throw new Error('The saved wallet request changed. Refresh before checking it again.');
+      const anchor=pending.originalHash??pending.hash;
+      // A public nonce baseline cannot identify a hashless wallet request or
+      // prove that an unrelated transaction cancelled it. Keep that gate held.
+      if(!anchor)throw new Error('The original transaction hash was not recorded. Check this request in your wallet; an unrelated transaction cannot clear it.');
       const hash=/^0x[0-9a-fA-F]{64}$/.test(recoveryHash)?recoveryHash as Hex:pending.hash;
       if(!hash)throw new Error('Paste the transaction hash from your wallet to check it.');
+      const journal=createOwnedJournal<PendingSweep>({lease:workflow,storage:localStorage,key:journalKey,notify:record=>reflectPending(record,address,chainId)});
+      let record:PendingSweep=journal.begin(pending,raw);
       const transaction=await publicClient.getTransaction({hash});
-      let record=pending;
       let approvalProof:ReturnType<typeof bindSubmittedWalletRequest>['approvalProof'];
-      const anchor=record.originalHash??record.hash;
-      const isOriginal=!!anchor&&sameAddress(hash,anchor);
-      // A legacy pre-read nonce is only a baseline. Rebind it using the
-      // immutable hash already returned by the wallet and exact original intent.
-      // Old replacement journals already proved their original nonce before
-      // recording originalHash; hashless recovery retains its strict nonce gate.
-      if(isOriginal){
-        const bound=bindSubmittedWalletRequest(record,transaction,anchor);
-        record=bound;approvalProof=bound.approvalProof;saveReconciled(record);
-      }else if(record.hash && !record.nonceVerified && !record.originalHash){
-        const original=sameAddress(hash,record.hash)?transaction:await publicClient.getTransaction({hash:record.hash});
-        const bound=bindSubmittedWalletRequest(record,original);
-        record=bound;approvalProof=bound.approvalProof;saveReconciled(record);
-      }
+      const isOriginal=sameAddress(hash,anchor);
+      // Reprove the immutable original hash, full intent and actual nonce even
+      // for old replacement journals. Persisted flags never substitute for it.
+      const original=isOriginal?transaction:await publicClient.getTransaction({hash:anchor});
+      const bound=bindSubmittedWalletRequest(record,original,anchor);
+      record=bound;approvalProof=bound.approvalProof;
+      checkScope(captured);journal.update(record);
       if(!sameAddress(transaction.hash,hash)||transaction.chainId!==undefined&&transaction.chainId!==chainId)throw new Error('The transaction lookup does not match the saved hash or network.');
       const kind=isOriginal?'intent':pendingTransactionKind(record,transaction);
       const receipt=await publicClient.getTransactionReceipt({hash});
@@ -1645,12 +1655,12 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
         if(required===0n?available!==0n:available<required)throw new Error('The confirmed approval did not set the required allowance. Check this request before retrying.');
       }
       checkScope(captured);
-      saveReconciled(null);
+      journal.clear();
       setError(kind==='replacement'?'The saved transaction was replaced or cancelled. Balances have been refreshed; review any remaining tokens.':receipt.status==='success'?'Transaction confirmed. Balances have been refreshed; review a new quote for any remaining tokens.':'Transaction reverted. No swap from this transaction was completed.');
       setRecoveryHash(''); setQuotePreviewData(null); setShowQuotePreview(false);
       await scanWalletTokens(true);
     } catch(e:any) { if(captured.key===contextRef.current.key&&captured.epoch===contextRef.current.epoch)setError(e?.name==='TransactionReceiptNotFoundError'?'Transaction is still pending. Check again before sending another transaction.':e?.message||'Could not confirm this transaction.'); }
-    finally {sendLock.current=false;setIsReconciling(false);}
+    finally {workflow?.release();sendLock.current=false;setIsReconciling(false);}
   };
 
   const executeConfirmedSwaps = useCallback(async () => {
@@ -1664,6 +1674,7 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
     let received=0, success=0,totalRaw=0n;
     let stopReason:string|undefined;
     let awaitingSwap:QuotePreviewItem[]=[];
+    let workflow:WalletWorkflowLease|undefined;
     const failureText=(e:any)=>{
       if(isWalletRejection(e))return 'Wallet request cancelled.';
       const parts=[String(e?.shortMessage||e?.message||'Could not prepare this sweep.')];
@@ -1686,36 +1697,37 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
       const data=encodeFunctionData(request);
       const [nonce,createdBlock]=await Promise.all([publicClient.getTransactionCount({address:account,blockTag:'pending'}),publicClient.getBlockNumber()]);
       await assertWallet();
-      let record:PendingSweep={version:1,account,chainId:network,target:request.address,data,value:'0',nonce,createdBlock:createdBlock.toString(),createdAt:Date.now(),label};
-      savePending(record,account,network);
+      const journal=createOwnedJournal<PendingSweep>({lease:workflow!,storage:localStorage,key:pendingKey(account,network),notify:record=>reflectPending(record,account,network)});
+      let record:PendingSweep=journal.begin({version:1,account,chainId:network,target:request.address,data,value:'0',nonce,createdBlock:createdBlock.toString(),createdAt:Date.now(),label});
+      journal.assertCurrent();
       let hash:Hex;
       try {
         hash=await writeContractAsync({...request,account,chainId:network,value:0n,nonce});
       }catch(e){
-        if(isProvenNotSubmitted(e))savePending(null,account,network);
+        if(isProvenNotSubmitted(e))journal.clear();
         throw e;
       }
       if(typeof hash!=='string'||!/^0x[0-9a-fA-F]{64}$/.test(hash))throw Object.assign(new Error('Your wallet did not return a transaction hash. Check its activity before retrying.'),{stopQueue:true});
       // Keep the original scope's journal even if the wallet changes while prompting.
-      record={...record,hash};savePending(record,account,network);
+      record={...record,hash};journal.update(record);
       if(contextRef.current.key===captured.key&&contextRef.current.epoch===captured.epoch)setTxHash(hash);
       // Capture the accepted nonce as soon as the transaction is visible.
       let visible:Awaited<ReturnType<typeof publicClient.getTransaction>>|undefined;
       try{visible=await publicClient.getTransaction({hash});}catch{/* Keep the hash held while the node catches up. */}
-      if(visible){record=bindSubmittedWalletRequest(record,visible,hash);savePending(record,account,network);}
+      if(visible){record=bindSubmittedWalletRequest(record,visible,hash);journal.update(record);}
       const receipt=await publicClient.waitForTransactionReceipt({hash,timeout:90_000,onReplaced:replacement=>{
         try{
           const original=bindSubmittedWalletRequest(record,replacement.replacedTransaction,hash);
           pendingTransactionKind(original,replacement.transaction);
           if(!/^0x[0-9a-fA-F]{64}$/.test(replacement.transaction.hash))return;
           record={...original,originalHash:hash,hash:replacement.transaction.hash};
-          savePending(record,account,network);
+          journal.update(record);
         }catch{/* A replacement without original hash/intent proof stays held. */}
       }});
       const transaction=await publicClient.getTransaction({hash:receipt.transactionHash});
       if(!sameAddress(transaction.hash,receipt.transactionHash)||transaction.chainId!==undefined&&transaction.chainId!==network)throw new Error('Transaction confirmation does not match its hash or network.');
       if(sameAddress(receipt.transactionHash,hash)){
-        record=bindSubmittedWalletRequest(record,transaction,hash);savePending(record,account,network);
+        record=bindSubmittedWalletRequest(record,transaction,hash);journal.update(record);
       }
       const kind=sameAddress(receipt.transactionHash,hash)?'intent':pendingTransactionKind(record,transaction);
       if(receipt.blockNumber<BigInt(record.createdBlock!)||(await publicClient.getBlock({blockNumber:receipt.blockNumber})).hash!==receipt.blockHash)throw new Error('Transaction confirmation changed. Check again.');
@@ -1725,7 +1737,7 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
         if(required===0n?available!==0n:available<required)throw Object.assign(new Error('The confirmed approval did not set the required allowance. Check this request before retrying.'),{stopQueue:true});
       }
       // Confirmation removes the pending gate; no timeout or RPC error does.
-      savePending(null,account,network);
+      journal.clear();
       if(kind==='replacement')throw new Error('The wallet transaction was replaced or cancelled. Re-scan and review before continuing.');
       if(receipt.status!=='success')throw Object.assign(new Error(`${label} reverted. Review the token before retrying.`),{confirmedRevert:true});
       checkScope(captured);
@@ -1733,6 +1745,7 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
     };
     const result=(q:QuotePreviewItem,status:'success'|'failed'|'skipped'|'pending',message?:string,actual?:bigint):SwapResultDetail=>({symbol:q.token.symbol,tokenIn:q.token.address,amountIn:q.token.amountToSwap,decimalsIn:q.token.decimals,inputValueUsd:q.inputValueUsd,quotedOutputUsd:q.quotedOutputUsd,estimatedInputValueUsd:q.estimatedInputValueUsd,estimatedInputUsdc:q.estimatedInputUsdc,actualOutputUsd:actual===undefined?undefined:Number(formatUnits(actual,preview.outputDecimals))*preview.outputPrice,executionSlippage:0,totalCostPercent:q.lossPercent,independentValuationAvailable:q.quality.independentLossPercent!==null,status,error:message});
     try {
+      workflow=await acquireWalletWorkflow(walletWorkflowKey(account,network));
       await assertWallet();
       const output=outputAddress(preview.outputToken);
       const readExecutionPrices=createExecutionPriceReader({chainId:network,read:inputs=>fetchMarketPrices(inputs.map(input=>({...input,address:input.address as Address})),network,output)});
@@ -1885,7 +1898,7 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
       if(contextRef.current.key===captured.key&&contextRef.current.epoch===captured.epoch){
         setDetailedResults(results);setSwapResults({success,failed:results.filter(r=>r.status==='failed').length,skipped:skippedCount,pending:pendingCount,problem,walletRequest:pendingRecord?{label:pendingRecord.label,hash:pendingRecord.hash}:undefined,totalValue:received,totalOutput:formatUnits(totalRaw,preview.outputDecimals),outputToken:preview.outputToken,valuationAvailable:preview.outputPrice>0});setShowResultsModal(true);setIsProcessing(false);setProgressStep('');setQuotePreviewData(null);
       }
-      sendLock.current=false;
+      workflow?.release();sendLock.current=false;
       if(contextRef.current.key===captured.key&&contextRef.current.epoch===captured.epoch&&success>0&&!localStorage.getItem(pendingKey(account,network)))void scanWalletTokens(true);
     }
   },[address,publicClient,walletClient,quotePreviewData,pending,journalError,chainId,config,writeContractAsync,scanWalletTokens]);
@@ -1960,36 +1973,46 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
       
       {/* Quote Preview Modal */}
       {showQuotePreview && quotePreviewData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-slate-800 border border-slate-700 rounded-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden shadow-2xl"
-          >
-            <div className="p-6 border-b border-slate-700 bg-gradient-to-r from-amber-500/10 to-orange-500/10">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center">
-                    <AlertTriangle className="w-7 h-7 text-white" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-bold text-white">Review Swap Quotes</h3>
-                    <p className="text-sm text-slate-400">
-                      {quotePreviewData.quotes.length} quotes received, {quotePreviewData.failedQuotes.length} failed
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => {
-                    setShowQuotePreview(false);
-                    setQuotePreviewData(null);
-                  }}
-                  className="p-2 hover:bg-slate-700 rounded-lg transition-colors"
-                >
-                  <X className="w-5 h-5 text-slate-400" />
-                </button>
-              </div>
-              
+        <SweepDialog
+          open
+          title="Review Swap Quotes"
+          description={<>{quotePreviewData.quotes.length} quotes received, {quotePreviewData.failedQuotes.length} failed</>}
+          leading={<div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center"><AlertTriangle className="w-7 h-7 text-white" /></div>}
+          closeLabel="Close quote review"
+          dismissible={!isProcessing}
+          returnFocusRef={sweepDialogReturnRef}
+          onRequestClose={() => {
+            setShowQuotePreview(false);
+            setQuotePreviewData(null);
+          }}
+          footer={(
+<div className="sweep-dialog-actions">
+              <button
+                onClick={() => {
+                  setShowQuotePreview(false);
+                  setQuotePreviewData(null);
+                }}
+                className="flex-1 py-3 px-4 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-xl transition-all duration-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={executeConfirmedSwaps}
+                disabled={!quotePreviewData.quotes.some(q=>q.selected&&quoteValueExecutable(q.quality,q.riskConsent))}
+                className="flex-1 py-3 px-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 disabled:from-slate-600 disabled:to-slate-600 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-all duration-200"
+              >
+                {(() => {
+                  const executable = quotePreviewData.quotes.filter(q=>q.selected&&quoteValueExecutable(q.quality,q.riskConsent)).length;
+                  const skipped = quotePreviewData.quotes.filter(q=>q.selected&&!quoteValueExecutable(q.quality,q.riskConsent)).length;
+                  return skipped > 0
+                    ? `Confirm Sweep (${executable} tokens, ${skipped} skipped)`
+                    : `Confirm Sweep (${executable} tokens)`;
+                })()}
+              </button>
+            </div>
+          )}
+        >
+          <div className="p-4 border-b border-slate-700 bg-gradient-to-r from-amber-500/10 to-orange-500/10">
               <div className="grid grid-cols-3 gap-4 mt-4">
                 <div className="bg-slate-900/50 rounded-lg p-3">
                   <p className="text-xs text-slate-400">Input value</p>
@@ -2019,9 +2042,8 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
                   })()}
                 </div>
               </div>
-            </div>
-            
-            <div className="overflow-y-auto max-h-[400px] p-4">
+          </div>
+            <div className="sweep-dialog-table p-4">
               <table className="w-full">
                 <thead className="text-xs text-slate-400 uppercase tracking-wider">
                   <tr>
@@ -2135,64 +2157,32 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
                 </div>
               </div>
             )}
-            
-            <div className="p-4 border-t border-slate-700 bg-slate-900/50 flex gap-3">
-              <button
-                onClick={() => {
-                  setShowQuotePreview(false);
-                  setQuotePreviewData(null);
-                }}
-                className="flex-1 py-3 px-4 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-xl transition-all duration-200"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={executeConfirmedSwaps}
-                disabled={!quotePreviewData.quotes.some(q=>q.selected&&quoteValueExecutable(q.quality,q.riskConsent))}
-                className="flex-1 py-3 px-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 disabled:from-slate-600 disabled:to-slate-600 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-all duration-200"
-              >
-                {(() => {
-                  const executable = quotePreviewData.quotes.filter(q=>q.selected&&quoteValueExecutable(q.quality,q.riskConsent)).length;
-                  const skipped = quotePreviewData.quotes.filter(q=>q.selected&&!quoteValueExecutable(q.quality,q.riskConsent)).length;
-                  return skipped > 0 
-                    ? `Confirm Sweep (${executable} tokens, ${skipped} skipped)`
-                    : `Confirm Sweep (${executable} tokens)`;
-                })()}
-              </button>
-            </div>
-          </motion.div>
-        </div>
+        </SweepDialog>
       )}
-      
+
       {/* Results Modal */}
       {showResultsModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="flex flex-col bg-slate-800 border border-slate-700 rounded-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden shadow-2xl"
-          >
-            <div className="p-6 shrink-0 border-b border-slate-700 bg-gradient-to-r from-emerald-500/10 to-teal-500/10">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
-                    {swapResults?.success&&!swapResults?.pending?<CheckCircle className="w-7 h-7 text-white" />:<AlertTriangle className="w-7 h-7 text-white" />}
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-bold text-white">{swapResults?.pending?'Sweep awaiting confirmation':!swapResults?.success?(swapResults?.failed?'Sweep failed':'Sweep not sent'):swapResults.skipped||swapResults.failed?'Sweep partially completed':'Sweep Complete'}</h3>
-                    <p className="text-sm text-slate-400">
-                      {swapResults?.success || 0} swapped · {swapResults?.skipped || 0} not sent{swapResults?.pending?` · ${swapResults.pending} awaiting confirmation`:''}{swapResults?.failed?` · ${swapResults.failed} failed`:''}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setShowResultsModal(false)}
-                  className="p-2 hover:bg-slate-700 rounded-lg transition-colors"
-                >
-                  <X className="w-5 h-5 text-slate-400" />
-                </button>
-              </div>
-              
+        <SweepDialog
+          open
+          title={swapResults?.pending?'Sweep awaiting confirmation':!swapResults?.success?(swapResults?.failed?'Sweep failed':'Sweep not sent'):swapResults.skipped||swapResults.failed?'Sweep partially completed':'Sweep Complete'}
+          description={<>{swapResults?.success || 0} swapped · {swapResults?.skipped || 0} not sent{swapResults?.pending?` · ${swapResults.pending} awaiting confirmation`:''}{swapResults?.failed?` · ${swapResults.failed} failed`:''}</>}
+          leading={<div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">{swapResults?.success&&!swapResults?.pending?<CheckCircle className="w-7 h-7 text-white" />:<AlertTriangle className="w-7 h-7 text-white" />}</div>}
+          closeLabel="Close sweep results"
+          dismissible={!isProcessing}
+          returnFocusRef={sweepDialogReturnRef}
+          onRequestClose={() => setShowResultsModal(false)}
+          footer={(
+<div className="sweep-dialog-actions">
+              <button
+                onClick={() => setShowResultsModal(false)}
+                className="w-full py-3 px-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-semibold rounded-xl transition-all duration-200"
+              >
+                Done
+              </button>
+            </div>
+          )}
+        >
+          <div className="p-4 border-b border-slate-700 bg-gradient-to-r from-emerald-500/10 to-teal-500/10">
               {swapResults?.problem && <div role="alert" className="mt-4 p-3 rounded-lg border border-yellow-500/30 bg-yellow-500/10 text-sm text-yellow-200">{swapResults.problem}</div>}
               {swapResults?.walletRequest && <div className="mt-3 p-3 rounded-lg border border-amber-500/30 text-sm text-amber-200" aria-label="Wallet request to verify">
                 <p>{swapResults.walletRequest.label} needs checking. No further transaction will be requested until it is resolved.</p>
@@ -2249,9 +2239,8 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
                   View transaction on explorer
                 </a>
               )}
-            </div>
-            
-            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          </div>
+            <div className="sweep-dialog-table p-4">
               <table className="w-full">
                 <thead className="text-xs text-slate-400 uppercase tracking-wider">
                   <tr>
@@ -2328,17 +2317,7 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
                 </div>
               )}
             </div>
-            
-            <div className="p-4 shrink-0 border-t border-slate-700 bg-slate-900/50">
-              <button
-                onClick={() => setShowResultsModal(false)}
-                className="w-full py-3 px-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-semibold rounded-xl transition-all duration-200"
-              >
-                Done
-              </button>
-            </div>
-          </motion.div>
-        </div>
+        </SweepDialog>
       )}
 
       <BrandHeader chain="evm" wallet={<ConnectButton/>}/>
@@ -2710,7 +2689,7 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
                               </div>
 
                               <div className="shrink-0 max-w-[8rem] break-words text-right">
-                                {priced?<><div className="text-emerald-400 font-medium">{formatUSD(token.valueUsd)}</div><div className="text-xs text-slate-500">@ ${formatNumber(token.price,4)}</div></>:estimate?<div className="text-amber-300" aria-label={`${token.symbol} pool estimate`} title="Indicative sale value from a native USDC quote. Trading still requires a fresh review."><div className="font-medium">Est. {estimate.valueUsd!==null?formatUSD(estimate.valueUsd):`${formatNumber(Number(formatUnits(estimate.usdcUnits,6)),4)} USDC`}</div><div className="text-[10px] text-amber-400/80">{estimate.priceUsd!==null?`≈ $${formatNumber(estimate.priceUsd,2)} each`:'Pool quote in USDC'}</div></div>:<span className="text-amber-400 text-sm font-medium" title="USD estimate unavailable. You can still review an exact amount.">Unpriced</span>}
+                                {priced?<><div className="text-emerald-400 font-medium">{formatUSD(token.valueUsd)}</div><div className="text-xs text-slate-500">@ ${formatNumber(token.price,4)}</div></>:estimate?<div className="text-amber-300 sweep-estimate" aria-label={`${token.symbol} pool estimate`} title="Indicative sale value from a native USDC quote. Trading still requires a fresh review."><div className="font-medium">Est. {estimate.valueUsd!==null?formatUSD(estimate.valueUsd):`${formatNumber(Number(formatUnits(estimate.usdcUnits,6)),4)} USDC`}</div><div className="text-[10px] text-amber-400/80 sweep-estimate-note">{estimate.priceUsd!==null?`≈ $${formatNumber(estimate.priceUsd,2)} each`:'Pool quote in USDC'}</div></div>:<span className="text-amber-400 text-sm font-medium" title="USD estimate unavailable. You can still review an exact amount.">Unpriced</span>}
                               </div>
                               
                               <button
@@ -2779,7 +2758,7 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
                   <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
                     <div className="flex flex-wrap items-baseline gap-2">
                       <span className="text-sm text-slate-400">Selected USD estimate:</span>
-                      <span className={`text-xl font-bold ${selectedDisplay.estimated?'text-amber-300':'text-white'}`}>
+                      <span className={`text-xl font-bold ${selectedDisplay.estimated?'text-amber-300 sweep-estimate':'text-white'}`}>
                         {selectedDisplay.value===null?'Unavailable':`${selectedDisplay.estimated?'Est. ':''}${formatUSD(selectedDisplay.value)}`}
                       </span>
                     </div>
@@ -2789,6 +2768,7 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
                   </div>
 
                   <button
+                    ref={sweepDialogReturnRef}
                     onClick={fetchQuotesAndShowPreview}
                     disabled={isProcessing || isScanning || selectedCount === 0 || !!pending || journalError}
                     className="w-full py-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-semibold text-lg transition flex items-center justify-center gap-2"

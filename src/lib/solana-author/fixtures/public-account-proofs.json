@@ -1,0 +1,120 @@
+{
+  "at": "2026-11-16T22:02:36.908Z",
+  "readOnly": true,
+  "credentialsUsed": false,
+  "source": "https://api.mainnet-beta.solana.com",
+  "httpStatus": 200,
+  "context": {
+    "apiVersion": "4.4.0",
+    "slot": 470291966
+  },
+  "genesisHash": "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d",
+  "blockhash": {
+    "context": {
+      "apiVersion": "4.4.0",
+      "slot": 470291966
+    },
+    "value": {
+      "blockhash": "7LjcPpL7iARWpDdt3woQCTxzTdcbveARvbKKZHVY21gn",
+      "lastValidBlockHeight": 448306977
+    }
+  },
+  "proofs": [
+    {
+      "pubkey": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "owner": "BPFLoaderUpgradeab1e11111111111111111111111",
+      "executable": true,
+      "exists": true
+    },
+    {
+      "pubkey": "GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB",
+      "owner": "7DiXsBWmwJ8WQZdgoyyic1wh5FGtib3Xe8vtfugSwhXG",
+      "executable": false,
+      "exists": true
+    },
+    {
+      "pubkey": "FXJ6Y213C7fJdcwmDRXUtFsokkV1XAni6JwD1Jf1rxcB",
+      "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "executable": false,
+      "exists": true
+    },
+    {
+      "pubkey": "7woc3ajaGMMXczFYjxon4aQoHH3j126fMUR9c58eHRsK",
+      "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "executable": false,
+      "exists": true
+    },
+    {
+      "pubkey": "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
+      "owner": "BPFLoaderUpgradeab1e11111111111111111111111",
+      "executable": true,
+      "exists": true
+    },
+    {
+      "pubkey": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "executable": false,
+      "exists": true
+    },
+    {
+      "pubkey": "Bbw22p1sbXcerJdDCu4qVyTGUutKCc8dxvNfUXkbby4A",
+      "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "executable": false,
+      "exists": true
+    },
+    {
+      "pubkey": "D8cy77BBepLMngZx6ZukaTff5hCt1HrWyKk3Hnd9oitf",
+      "owner": "11111111111111111111111111111111",
+      "executable": false,
+      "exists": true
+    },
+    {
+      "pubkey": "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",
+      "owner": "BPFLoaderUpgradeab1e11111111111111111111111",
+      "executable": true,
+      "exists": true
+    },
+    {
+      "pubkey": "4fuUiYxTQ6QCrdSq9ouBYcTM7bqSwYTSyLueGZLTy4T4",
+      "owner": "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",
+      "executable": false,
+      "exists": true
+    },
+    {
+      "pubkey": "4oY1eVHJrt7ywuFoQnAZwto4qcQip1QhYMAhD11PU4QL",
+      "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "executable": false,
+      "exists": true
+    },
+    {
+      "pubkey": "4dSG9tKHZR4CAictyEnH9XuGZyKapodWXq5xyg7uFwE9",
+      "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "executable": false,
+      "exists": true
+    },
+    {
+      "pubkey": "FqFkv2xNNCUyx1RYV61pGZ9AMzGfgcD8uXC9zCF5JKnR",
+      "owner": "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",
+      "executable": false,
+      "exists": true
+    },
+    {
+      "pubkey": "A7sdy3NoAZp49cQNpreMGARAb9QJjYrrSyDALhThgk3D",
+      "owner": "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",
+      "executable": false,
+      "exists": true
+    },
+    {
+      "pubkey": "9opqNK3dWUijw8VNLtvne4juCTq1qADaph29tZqkoZHa",
+      "owner": "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",
+      "executable": false,
+      "exists": true
+    },
+    {
+      "pubkey": "3NxDBWt55DZnEwwQ2bhQ3xWG8Jd18TdUXAG4Zdr7jDai",
+      "owner": null,
+      "executable": false,
+      "exists": false
+    }
+  ]
+}

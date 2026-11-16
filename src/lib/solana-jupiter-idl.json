@@ -1,0 +1,561 @@
+{
+  "source": {
+    "url": "https://github.com/jup-ag/jupiter-cpi/blob/main/idl.json",
+    "blobSHA": "5018becdfb4006d8f8ab058b54fec7d686892e5e",
+    "license": "Apache-2.0"
+  },
+  "instructions": [
+    {
+      "name": "route",
+      "docs": [
+        "route_plan Topologically sorted trade DAG"
+      ],
+      "accounts": [
+        {
+          "name": "tokenProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "userTransferAuthority",
+          "isMut": false,
+          "isSigner": true
+        },
+        {
+          "name": "userSourceTokenAccount",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "userDestinationTokenAccount",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "destinationTokenAccount",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": true
+        },
+        {
+          "name": "destinationMint",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "platformFeeAccount",
+          "isMut": true,
+          "isSigner": false,
+          "isOptional": true
+        },
+        {
+          "name": "eventAuthority",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "program",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "routePlan",
+          "type": {
+            "vec": {
+              "defined": "RoutePlanStep"
+            }
+          }
+        },
+        {
+          "name": "inAmount",
+          "type": "u64"
+        },
+        {
+          "name": "quotedOutAmount",
+          "type": "u64"
+        },
+        {
+          "name": "slippageBps",
+          "type": "u16"
+        },
+        {
+          "name": "platformFeeBps",
+          "type": "u8"
+        }
+      ],
+      "returns": "u64"
+    },
+    {
+      "name": "whirlpoolSwap",
+      "accounts": [
+        {
+          "name": "swapProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "tokenProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "tokenAuthority",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "whirlpool",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "tokenOwnerAccountA",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "tokenVaultA",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "tokenOwnerAccountB",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "tokenVaultB",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "tickArray0",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "tickArray1",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "tickArray2",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "oracle",
+          "isMut": false,
+          "isSigner": false,
+          "docs": [
+            "Oracle is currently unused and will be enabled on subsequent updates"
+          ]
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "meteoraDlmmSwap",
+      "accounts": [
+        {
+          "name": "swapProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "lbPair",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "binArrayBitmapExtension",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "reserveX",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "reserveY",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "userTokenIn",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "userTokenOut",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "tokenXMint",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "tokenYMint",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "oracle",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "hostFeeIn",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "user",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "tokenXProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "tokenYProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "eventAuthority",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "program",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": []
+    }
+  ],
+  "types": [
+    {
+      "name": "AddLiquidity",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "tokenAmountIn",
+            "type": "u64"
+          },
+          {
+            "name": "minLpAmountOut",
+            "type": "u64"
+          },
+          {
+            "name": "tokenAmountPreSwap",
+            "type": {
+              "option": "u64"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "RemoveLiquidity",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "lpAmountIn",
+            "type": "u64"
+          },
+          {
+            "name": "minAmountOut",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AmountWithSlippage",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "slippageBps",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RoutePlanStep",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "swap",
+            "type": {
+              "defined": "Swap"
+            }
+          },
+          {
+            "name": "percent",
+            "type": "u8"
+          },
+          {
+            "name": "inputIndex",
+            "type": "u8"
+          },
+          {
+            "name": "outputIndex",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Side",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Bid"
+          },
+          {
+            "name": "Ask"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Swap",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Saber"
+          },
+          {
+            "name": "SaberAddDecimalsDeposit"
+          },
+          {
+            "name": "SaberAddDecimalsWithdraw"
+          },
+          {
+            "name": "TokenSwap"
+          },
+          {
+            "name": "Sencha"
+          },
+          {
+            "name": "Step"
+          },
+          {
+            "name": "Cropper"
+          },
+          {
+            "name": "Raydium"
+          },
+          {
+            "name": "Crema",
+            "fields": [
+              {
+                "name": "aToB",
+                "type": "bool"
+              }
+            ]
+          },
+          {
+            "name": "Lifinity"
+          },
+          {
+            "name": "Mercurial"
+          },
+          {
+            "name": "Cykura"
+          },
+          {
+            "name": "Serum",
+            "fields": [
+              {
+                "name": "side",
+                "type": {
+                  "defined": "Side"
+                }
+              }
+            ]
+          },
+          {
+            "name": "MarinadeDeposit"
+          },
+          {
+            "name": "MarinadeUnstake"
+          },
+          {
+            "name": "Aldrin",
+            "fields": [
+              {
+                "name": "side",
+                "type": {
+                  "defined": "Side"
+                }
+              }
+            ]
+          },
+          {
+            "name": "AldrinV2",
+            "fields": [
+              {
+                "name": "side",
+                "type": {
+                  "defined": "Side"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Whirlpool",
+            "fields": [
+              {
+                "name": "aToB",
+                "type": "bool"
+              }
+            ]
+          },
+          {
+            "name": "Invariant",
+            "fields": [
+              {
+                "name": "xToY",
+                "type": "bool"
+              }
+            ]
+          },
+          {
+            "name": "Meteora"
+          },
+          {
+            "name": "GooseFX"
+          },
+          {
+            "name": "DeltaFi",
+            "fields": [
+              {
+                "name": "stable",
+                "type": "bool"
+              }
+            ]
+          },
+          {
+            "name": "Balansol"
+          },
+          {
+            "name": "MarcoPolo",
+            "fields": [
+              {
+                "name": "xToY",
+                "type": "bool"
+              }
+            ]
+          },
+          {
+            "name": "Dradex",
+            "fields": [
+              {
+                "name": "side",
+                "type": {
+                  "defined": "Side"
+                }
+              }
+            ]
+          },
+          {
+            "name": "LifinityV2"
+          },
+          {
+            "name": "RaydiumClmm"
+          },
+          {
+            "name": "Openbook",
+            "fields": [
+              {
+                "name": "side",
+                "type": {
+                  "defined": "Side"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Phoenix",
+            "fields": [
+              {
+                "name": "side",
+                "type": {
+                  "defined": "Side"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Symmetry",
+            "fields": [
+              {
+                "name": "fromTokenId",
+                "type": "u64"
+              },
+              {
+                "name": "toTokenId",
+                "type": "u64"
+              }
+            ]
+          },
+          {
+            "name": "TokenSwapV2"
+          },
+          {
+            "name": "HeliumTreasuryManagementRedeemV0"
+          },
+          {
+            "name": "StakeDexStakeWrappedSol"
+          },
+          {
+            "name": "StakeDexSwapViaStake",
+            "fields": [
+              {
+                "name": "bridgeStakeSeed",
+                "type": "u32"
+              }
+            ]
+          },
+          {
+            "name": "GooseFXV2"
+          },
+          {
+            "name": "Perps"
+          },
+          {
+            "name": "PerpsAddLiquidity"
+          },
+          {
+            "name": "PerpsRemoveLiquidity"
+          },
+          {
+            "name": "MeteoraDlmm"
+          }
+        ]
+      }
+    }
+  ]
+}

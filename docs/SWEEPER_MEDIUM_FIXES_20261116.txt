@@ -1,0 +1,77 @@
+Sweeper five-round audit: Medium remediation candidate
+16 November 2026
+
+Baseline: b3b9527698eeeb322d97cf511662fa95d7bcd5cd.
+Scope: the eight Mediums in sweeper-five-rounds-b3b9527-2026-11-16.
+This source is a local review candidate. Production publication is separate.
+
+SWP-R2-M01: recovery cannot infer cancellation from a public nonce baseline.
+A known original transaction must prove the actual nonce and reviewed intent
+before a replacement can clear the request. A hashless, uncertain wallet
+response stays held for reconciliation; it is never automatically replayed.
+
+SWP-R2-M02: one native Web Lock covers the entire same-wallet/network workflow,
+including every approval, refreshed quote, signature and receipt check. A busy
+workflow fails immediately instead of queueing a stale trade. Every journal
+mutation checks the exact owned snapshot. Storage events update other tabs.
+Browsers without Web Locks fail closed. The lock coordinates cooperating
+current-version tabs on the same origin/browser profile; it does not control
+other dApps, devices, profiles or an already-loaded older version of this app.
+
+R3-M01/M02/M03: stock estimates use theme contrast tokens. Quote and results
+dialogs use the native modal lifecycle, accessible labels, keyboard containment,
+controlled Escape and opener restoration. Their content and footer can scroll
+independently so short screens can reach the enabled action buttons. Closing a
+results dialog only dismisses its presentation, never the pending journal.
+
+R4-M01: the active Solana route uses guarded server reads. Browser bundles need
+no Helius key or fee-wallet binding. Pure request validation precedes the shared
+D1 admission and lazy provider binding access. The existing 5bps recipient is
+unchanged; its classic SPL output fee account is freshly verified. Missing or
+invalid configuration/accounts hold the affected output with an explanation.
+RPC genesis comparisons use the full Solana mainnet genesis hash.
+
+R4-M02: reviews bind the original account, network, raw input cap, mint units,
+output minimum, quote age and explicit risk consent. Wallet/output/amount changes
+invalidate the preview. Refreshing never lowers the original minimum or widens
+slippage. Jupiter priceImpactPct is converted from its documented fractional
+unit. The app validates bounded direct exact-input Jupiter V1 Whirlpool/Meteora
+DLMM instruction plans, account layouts, executable programs and pool ownership,
+then compiles the permitted message locally. Provider setup/compute/ALT data is
+not signed blindly. Conservative integer tightening can raise the instruction's
+quoted-output reference by a unit to preserve the original rounded-up minimum.
+The original displayed quote and reviewed minimum remain unchanged.
+
+R4-M03: an owned marker is saved before the signer. Original signed bytes,
+signature, blockhash and expiry are saved before broadcast. An uncertain send
+or confirmation stops the queue and persists across reload. Reconciliation
+requires the original finalized wire and exact token deltas. Mere absence or
+expiry cannot authorize another attempt. A proven explicit signer rejection can
+clear only its own unchanged, still-unsigned marker and stops later prompts;
+ambiguous errors, a mutated signed object, post-signing errors and foreign
+markers remain held. An adapter's signed-in-place object is preserved even if
+its response is lost. No automatic fresh retry or rebroadcast is introduced.
+
+Solana support is deliberately bounded to classic SPL ATA balances and the
+validated route families. Native SOL is preserved. Token-2022, non-ATA holdings,
+shared-account/ledger/native-wrapping plans and new instruction families are
+held. USDC readiness uses the existing fee ATA. WSOL output remains unavailable
+until its missing fee ATA receives separate operator initialization/review; this
+release does not create it or change the fee policy. Discovery is explicitly
+partial at its 300-holding limit.
+
+Verification and limitations
+
+Repository-contained tests and public unsigned Jupiter/account fixtures support
+offline reproduction. Final independent review and source/artifact manifests
+are delivered alongside the release. Execution tests use synthetic wallets,
+providers and chain boundaries. Public Solana quotes, unsigned construction,
+genesis and fee-account metadata were checked without credentials or signing.
+The authenticated Helius health check is held pending explicit owner approval:
+automatic approval review rejected sending the existing server key to Helius.
+No real signature, swap, transfer, deployment, hosted setting change or Git push
+forms part of this remediation. Earlier audit reports remain sealed.
+
+Report-only Lows retain their own status. Solana risk-consent forwarding and
+observed finalized output overlap the required Medium repairs; no blanket Low
+closure or outside-auditor adjudication is claimed.
