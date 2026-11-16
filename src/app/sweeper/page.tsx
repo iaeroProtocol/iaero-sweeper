@@ -5,6 +5,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { BrandHeader, BrandFooter } from '@/components/brand';
 import { AERO, SLIPPAGE_BPS, QUOTE_TTL_MS, exactAmount, minimumOutput, preserveMinimum, bind0xQuote, pendingKey, validatePending, matchesPending, pendingTransactionKind, walletReceiptOutput, isWalletRejection, isProvenNotSubmitted, mapBounded, sameAddress, type PendingSweep, type OutputToken } from '@/lib/sweep-guards';
 import type { BaseNativeQuote, BaseNativeConfig, BaseNativeClient } from '@/lib/base-native-sweep';
+import { independentPrice, currentIndependentPrice, assessQuoteValue, acceptValueRisk, quoteValueExecutable, assertRefreshedQuoteValue, type IndependentPrice, type QuoteValueQuality, type ValueRiskConsent } from '@/lib/sweep-value-quality';
+import { discoveryFailureMessage, discoveredTokenAddresses } from '@/lib/sweep-discovery-ui';
 import { 
   useAccount, 
   usePublicClient, 
@@ -225,7 +227,10 @@ interface TokenInfo {
   valueUsd: number;
   logoUrl?: string;
   priceSource?: 'zerox' | 'defillama' | 'coingecko' | 'stablecoin' | 'unknown';
+  priceObservation?: IndependentPrice;
 }
+
+type MarketPrice = { price: number; source: string; observation?: IndependentPrice };
 
 interface TokenWithAmount extends TokenInfo {
   amountToSwap: bigint;
@@ -270,6 +275,7 @@ interface SwapResultDetail {
   actualOutputUsd?: number;
   executionSlippage: number;
   totalCostPercent: number;
+  independentValuationAvailable: boolean;
   status: 'success' | 'failed' | 'skipped' | 'pending';
   error?: string;
 }
@@ -533,7 +539,7 @@ function getPriceCacheKey(chainId: number): string {
   return `sweeper_prices_${chainId}`;
 }
 
-function getCachedPrices(chainId: number): Record<string, { price: number; source: string; timestamp: number }> {
+function getCachedPrices(chainId: number): Record<string, MarketPrice & { timestamp: number }> {
   if (typeof window === 'undefined') return {};
   try {
     const key = getPriceCacheKey(chainId);
@@ -547,21 +553,21 @@ function getCachedPrices(chainId: number): Record<string, { price: number; sourc
   return {};
 }
 
-function getCachedPrice(chainId: number, tokenAddress: string): { price: number; source: string } | null {
+function getCachedPrice(chainId: number, tokenAddress: string): MarketPrice | null {
   const allPrices = getCachedPrices(chainId);
   const entry = allPrices[tokenAddress.toLowerCase()];
-  if (entry && Date.now() - entry.timestamp < PRICE_CACHE_TTL) {
-    return { price: entry.price, source: entry.source };
+  if (entry && Number.isFinite(entry.price) && entry.price > 0 && Number.isSafeInteger(entry.timestamp) && entry.timestamp <= Date.now() && Date.now() - entry.timestamp < PRICE_CACHE_TTL) {
+    return { price: entry.price, source: entry.source, observation: currentIndependentPrice(entry.observation, chainId, tokenAddress) };
   }
   return null;
 }
 
-function setCachedPrice(chainId: number, tokenAddress: string, price: number, source: string): void {
+function setCachedPrice(chainId: number, tokenAddress: string, price: MarketPrice): void {
   if (typeof window === 'undefined') return;
   try {
     const key = getPriceCacheKey(chainId);
     const allPrices = getCachedPrices(chainId);
-    allPrices[tokenAddress.toLowerCase()] = { price, source, timestamp: Date.now() };
+    allPrices[tokenAddress.toLowerCase()] = { ...price, timestamp: price.observation?.retrievedAt ?? Date.now() };
     localStorage.setItem(key, JSON.stringify(allPrices));
   } catch (e) {
     console.warn('Failed to write price cache:', e);
@@ -709,7 +715,8 @@ interface QuotePreviewItem {
   lossUsd: number;
   quote: SwapQuote;
   selected: boolean;
-  forceHighSlippage?: boolean;
+  quality: QuoteValueQuality;
+  riskConsent?: ValueRiskConsent;
 }
 
 interface FailedQuoteItem {
@@ -722,6 +729,7 @@ interface QuotePreviewData {
   failedQuotes: FailedQuoteItem[];
   outputToken: OutputToken;
   outputPrice: number;
+  outputPriceObservation?: IndependentPrice;
   outputDecimals: number;
   account: Address;
   chainId: number;
@@ -896,7 +904,6 @@ export default function TokenSweeperPage() {
     setIsScanning(true);
     setDiscoveryNotice('');
     setError(null);
-    setTokens([]);
     
     try {
       let rawTokens: RawTokenInfo[] | null = null;
@@ -960,6 +967,7 @@ export default function TokenSweeperPage() {
         }
         
         if (tokenAddresses.length === 0) {
+          setTokens([]);setSelectedTokens(new Set());setCustomAmounts({});
           setError('No tokens found in wallet');
           return;
         }
@@ -971,6 +979,7 @@ export default function TokenSweeperPage() {
         const validTokens = tokenInfos.filter(t => t.balance > 0n);
         
         if (validTokens.length === 0) {
+          setTokens([]);setSelectedTokens(new Set());setCustomAmounts({});
           setError('No swappable tokens found in wallet');
           return;
         }
@@ -1046,7 +1055,7 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
       const outputTokenAddr = config.usdc;
       
       const tokensNeedingPrices: Array<{ address: Address; decimals: number; unitsVerified?: boolean; balance: bigint; symbol: string }> = [];
-      const cachedPrices: Record<string, { price: number; source: string }> = {};
+      const cachedPrices: Record<string, MarketPrice> = {};
 
       for (const t of nonSpamRawTokens) {
         const addrLower = t.address.toLowerCase();
@@ -1069,7 +1078,7 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
       console.log(`💰 Using ${Object.keys(cachedPrices).length} cached prices, fetching ${tokensNeedingPrices.length} new`);
 
       // Fetch prices for tokens that need them
-      let fetchedPrices: Record<string, { price: number; source: string }> = {};
+      let fetchedPrices: Record<string, MarketPrice> = {};
       if (tokensNeedingPrices.length > 0) {
         fetchedPrices = await fetchMarketPrices(tokensNeedingPrices, chainId, outputTokenAddr, setProgressStep);
         
@@ -1077,7 +1086,7 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
         for (const t of tokensNeedingPrices) {
           const addrLower = t.address.toLowerCase();
           if (fetchedPrices[addrLower]) {
-            setCachedPrice(chainId, t.address, fetchedPrices[addrLower].price, fetchedPrices[addrLower].source);
+            setCachedPrice(chainId, t.address, fetchedPrices[addrLower]);
           }
         }
       }
@@ -1179,6 +1188,7 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
             balance,
             price,
             priceSource,
+            priceObservation: priceData?.observation,
             valueUsd: balanceNum * price,
             balanceFormatted: t.unitsVerified ? formatNumber(balanceNum, 4) : 'Units unavailable',
             logoUrl: t.logoUrl
@@ -1243,29 +1253,23 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
 
   async function fetchTokenList(chainId: number, wallet: string): Promise<Address[]> {
     const captured=scope();
+    let res:Response;
     try {
-      console.log('🔍 Fetching tokens via unified discovery API...');
-      const res = await fetch(
+      res = await fetch(
         `/api/tokens/discover?chainId=${chainId}&wallet=${wallet}`
       );
-      
-      if (res.ok) {
-        const data = await res.json();
-        checkScope(captured);
-        if(data.partial)setDiscoveryNotice('Some discovery services were unavailable. You can re-scan or add a missing token by address.');
-        if (data.logs) {
-          data.logs.forEach((log: string) => console.log(`  📡 ${log}`));
-        }
-        console.log(`✅ Found ${data.count} tokens`);
-        return data.tokens as Address[];
-      } else {
-        console.error('Token discovery API error:', res.status);
-        return [];
-      }
-    } catch (e) {
-      console.error('Token discovery failed:', e);
-      return [];
+    } catch {
+      checkScope(captured);
+      throw new Error('Token discovery could not be reached. Retry the scan.');
     }
+    checkScope(captured);
+    if(!res.ok)throw new Error(discoveryFailureMessage(res.status,res.headers.get('Retry-After')));
+    let data:unknown;
+    try { data=await res.json(); } catch { throw new Error('Token discovery returned an invalid response. Retry the scan.'); }
+    checkScope(captured);
+    const addresses=discoveredTokenAddresses(data);
+    if((data as {partial?:boolean}).partial)setDiscoveryNotice('Some discovery services were unavailable. You can re-scan or add a missing token by address.');
+    return addresses;
   }
 
   async function fetchTokenInfos(
@@ -1306,22 +1310,25 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
     chainId: number,
     outputToken: Address,
     onProgress?: (msg: string) => void
-  ): Promise<Record<string, { price: number; source: string }>> {
+  ): Promise<Record<string, MarketPrice>> {
     onProgress?.('Updating display prices…');
-    const prices: Record<string, {price:number;source:string}> = {};
+    const prices: Record<string, MarketPrice> = {};
     const chunks = Array.from({length:Math.ceil(tokens.length / 60)},(_,i)=>tokens.slice(i*60,i*60+60));
     await mapBounded(chunks, 3, async(chunk) => {
       const [llama, gecko] = await Promise.all([fetchDefiLlamaPrices(chunk.map(t=>t.address),chainId), fetchCoinGeckoPrices(chunk.map(t=>t.address),chainId)]);
       for (const t of chunk) {
         const key=t.address.toLowerCase();
-        const price=llama[key] ?? gecko[key];
-        if (Number.isFinite(price) && price>0) prices[key]={price,source:llama[key]?'defillama':'coingecko'};
+        if (llama[key]) prices[key]=llama[key];
+        else {
+          const observation=independentPrice({chainId,token:key,price:gecko[key],source:'coingecko',retrievedAt:Date.now()});
+          if(observation)prices[key]={price:observation.price,source:'coingecko',observation};
+        }
       }
     });
     return prices;
   }
 
-  async function fetchDefiLlamaPrices(addresses: Address[], chainId: number): Promise<Record<string, number>> {
+  async function fetchDefiLlamaPrices(addresses: Address[], chainId: number): Promise<Record<string, MarketPrice>> {
     const chainNameMap: Record<number, string> = {
       1: 'ethereum',
       8453: 'base',
@@ -1333,19 +1340,23 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
       534352: 'scroll',
       59144: 'linea',
     };
-    const chainName = chainNameMap[chainId] || 'ethereum';
+    const chainName = chainNameMap[chainId];
+    if(!chainName)return {};
     const ids = addresses.map(a => `${chainName}:${a}`).join(',');
     
     try {
       const res = await fetch(`https://coins.llama.fi/prices/current/${ids}`, {signal:AbortSignal.timeout(4500)});
+      if(!res.ok)return {};
       const data = await res.json();
-      
-      const prices: Record<string, number> = {};
+      const retrievedAt=Date.now();
+      const requested=new Set(addresses.map(a=>`${chainName}:${a.toLowerCase()}`));
+      const prices: Record<string, MarketPrice> = {};
       for (const [key, val] of Object.entries<any>(data.coins || {})) {
-        const addr = key.split(':')[1]?.toLowerCase();
-        if (addr && val?.price) {
-          prices[addr] = Number(val.price);
-        }
+        if(!requested.has(key.toLowerCase()))continue;
+        const addr = key.split(':')[1].toLowerCase();
+        const observation=independentPrice({chainId,token:addr,price:val?.price,source:'defillama',retrievedAt,
+          ...(val?.timestamp === undefined ? {} : {observedAt: typeof val.timestamp === 'number' ? val.timestamp*1000 : NaN})});
+        if(observation)prices[addr]={price:observation.price,source:'defillama',observation};
       }
       return prices;
     } catch {
@@ -1368,10 +1379,6 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
       }
       
       const data = await res.json();
-      
-      if (data.logs) {
-        data.logs.forEach((log: string) => console.log(`    📡 ${log}`));
-      }
       
       return data.prices || {};
     } catch (e) {
@@ -1428,6 +1435,15 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
     return nativeQuote();
   }
 
+  const quoteValueQuality = (token: TokenWithAmount, quote: SwapQuote, output: OutputToken, outputDecimals: number, outputPrice: IndependentPrice | undefined, reviewedMinimum = quote.minimum) => assessQuoteValue({
+    context: `${address?.toLowerCase()}:${token.amountToSwap}:${reviewedMinimum}`,
+    chainId, tokenIn: token.address, tokenOut: outputAddress(output),
+    inputUnits: Number(formatUnits(token.amountToSwap, token.decimals)),
+    outputUnits: Number(formatUnits(quote.buyAmount, outputDecimals)),
+    minimumOutputUnits: Number(formatUnits(reviewedMinimum, outputDecimals)),
+    inputPrice: token.priceObservation, outputPrice, routeCostPercent: quote.priceImpact,
+  });
+
   const fetchQuotesAndShowPreview = useCallback(async () => {
     if (!address || !publicClient || !supportedChain || isProcessing || sendLock.current || pending || journalError) return;
     const captured=scope();
@@ -1436,11 +1452,24 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
       if(localStorage.getItem(pendingKey(address,chainId)))throw new Error('Check the previous wallet request before quoting again.');
       const selected=tokens.filter(t=>selectedTokens.has(t.address)&&!sameAddress(t.address,outputAddress(outputToken)));
       if(!selected.length) throw new Error('Select tokens to sweep.');
-      const tokensToSwap=selected.map(t=>({...t,amountToSwap:exactAmount(customAmounts[t.address],t.balance,t.decimals,t.unitsVerified)}));
+      let tokensToSwap=selected.map(t=>({...t,amountToSwap:exactAmount(customAmounts[t.address],t.balance,t.decimals,t.unitsVerified)}));
       const outputDecimals=outputToken==='USDC'?config.usdcDecimals:18;
-      const prices=outputToken==='USDC'?{}:await fetchDefiLlamaPrices([outputAddress(outputToken)],chainId);
+      // Reuse current scan observations. Only missing/stale valuations are fetched
+      // in the existing bounded bulk reader when the user explicitly reviews.
+      const out=outputAddress(outputToken);
+      let outputPriceObservation=currentIndependentPrice(tokens.find(t=>sameAddress(t.address,out))?.priceObservation,chainId,out);
+      const needsPrices=tokensToSwap.filter(t=>!currentIndependentPrice(t.priceObservation,chainId,t.address));
+      const priceInputs=needsPrices.map(t=>({address:t.address,decimals:t.decimals,balance:t.balance,symbol:t.symbol}));
+      if(!outputPriceObservation)priceInputs.push({address:out,decimals:outputDecimals,balance:0n,symbol:outputToken});
+      const prices=priceInputs.length?await fetchMarketPrices(priceInputs,chainId,out):{};
+      tokensToSwap=tokensToSwap.map(t=>{
+        const observation=currentIndependentPrice(t.priceObservation,chainId,t.address)??prices[t.address.toLowerCase()]?.observation;
+        return {...t,priceObservation:observation,...(observation?{price:observation.price,priceSource:observation.source}:{})};
+      });
+      outputPriceObservation??=prices[out.toLowerCase()]?.observation;
       checkScope(captured);
-      const outputPrice=outputToken==='USDC'?1:(prices[outputAddress(outputToken).toLowerCase()]??0);
+      // A hardcoded stablecoin peg is not an independent USD observation.
+      const outputPrice=outputPriceObservation?.price??0;
       const allowAggregator=await aggregatorOutputAllowed(outputToken);
       checkScope(captured);
       let nativePromise:ReturnType<typeof loadNative>|undefined;
@@ -1452,14 +1481,14 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
           if(!allowAggregator&&chainId!==8453)throw new Error('This output is not enabled on this network.');
           const quote=await quoteToken(token,outputToken,outputPrice,native,allowAggregator?'auto':'native');
           checkScope(captured);
-          const inputValueUsd=Number(formatUnits(token.amountToSwap,token.decimals))*token.price;
-          const quotedOutputUsd=Number(formatUnits(quote.buyAmount,outputDecimals))*outputPrice;
-          return {ok:true as const,value:{token,inputValueUsd,quotedOutputUsd,lossPercent:quote.priceImpact,lossUsd:Math.max(0,inputValueUsd-quotedOutputUsd),quote,selected:quote.priceImpact<=5}};
+          const quality=quoteValueQuality(token,quote,outputToken,outputDecimals,outputPriceObservation);
+          const inputValueUsd=quality.inputUsd??0,quotedOutputUsd=quality.outputUsd??0;
+          return {ok:true as const,value:{token,inputValueUsd,quotedOutputUsd,lossPercent:quality.independentLossPercent??quote.priceImpact,lossUsd:Math.max(0,inputValueUsd-quotedOutputUsd),quote,quality,selected:quality.defaultSelected}};
         } catch(e:any) { return {ok:false as const,value:{token,error:e?.message||'No executable route found.'}}; }
         finally { if(captured.key===contextRef.current.key&&captured.epoch===contextRef.current.epoch) setProgressStep(`Quoting ${++complete} of ${tokensToSwap.length} tokens…`); }
       });
       checkScope(captured);
-      setQuotePreviewData({quotes:results.flatMap(r=>r.ok?[r.value]:[]),failedQuotes:results.flatMap(r=>!r.ok?[r.value]:[]),outputToken,outputPrice,outputDecimals,account:address,chainId});
+      setQuotePreviewData({quotes:results.flatMap(r=>r.ok?[r.value]:[]),failedQuotes:results.flatMap(r=>!r.ok?[r.value]:[]),outputToken,outputPrice,outputPriceObservation,outputDecimals,account:address,chainId});
       setShowQuotePreview(true);
     } catch(e:any) { if(captured.key===contextRef.current.key&&captured.epoch===contextRef.current.epoch)setError(e?.message||'Could not quote these tokens.'); }
     finally { if(captured.key===contextRef.current.key&&captured.epoch===contextRef.current.epoch){setIsProcessing(false);setProgressStep('');} }
@@ -1481,7 +1510,7 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
     });
   }, [quotePreviewData]);
 
-  const toggleForceSlippage = useCallback((tokenAddress: string) => {
+  const toggleValueRiskConsent = useCallback((tokenAddress: string) => {
     if (!quotePreviewData) return;
     
     setQuotePreviewData((prev: QuotePreviewData | null) => {
@@ -1490,7 +1519,7 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
         ...prev,
         quotes: prev.quotes.map((q: QuotePreviewItem) => 
           q.token.address === tokenAddress 
-            ? { ...q, forceHighSlippage: !q.forceHighSlippage }
+            ? { ...q, riskConsent: q.riskConsent ? undefined : acceptValueRisk(q.quality) }
             : q
         )
       };
@@ -1526,7 +1555,7 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
     if(!address||!publicClient||!walletClient||!quotePreviewData||sendLock.current||pending||journalError)return;
     const captured=scope(),account=address,network=chainId,preview=quotePreviewData;
     if(!sameAddress(preview.account,account)||preview.chainId!==network){setError('Wallet or network changed. Review a new quote.');return;}
-    const chosen=preview.quotes.filter(q=>q.selected&&(q.lossPercent<=5||q.forceHighSlippage));
+    const chosen=preview.quotes.filter(q=>q.selected&&quoteValueExecutable(q.quality,q.riskConsent));
     if(!chosen.length){setError('Select a token with an executable quote.');return;}
     sendLock.current=true;setIsProcessing(true);setShowQuotePreview(false);setError(null);setSwapResults(null);setDetailedResults([]);
     const results:SwapResultDetail[]=[];
@@ -1586,7 +1615,7 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
       checkScope(captured);
       return receipt;
     };
-    const result=(q:QuotePreviewItem,status:'success'|'failed'|'skipped'|'pending',message?:string,actual?:bigint):SwapResultDetail=>({symbol:q.token.symbol,tokenIn:q.token.address,amountIn:q.token.amountToSwap,decimalsIn:q.token.decimals,inputValueUsd:q.inputValueUsd,quotedOutputUsd:q.quotedOutputUsd,actualOutputUsd:actual===undefined?undefined:Number(formatUnits(actual,preview.outputDecimals))*preview.outputPrice,executionSlippage:0,totalCostPercent:q.lossPercent,status,error:message});
+    const result=(q:QuotePreviewItem,status:'success'|'failed'|'skipped'|'pending',message?:string,actual?:bigint):SwapResultDetail=>({symbol:q.token.symbol,tokenIn:q.token.address,amountIn:q.token.amountToSwap,decimalsIn:q.token.decimals,inputValueUsd:q.inputValueUsd,quotedOutputUsd:q.quotedOutputUsd,actualOutputUsd:actual===undefined?undefined:Number(formatUnits(actual,preview.outputDecimals))*preview.outputPrice,executionSlippage:0,totalCostPercent:q.lossPercent,independentValuationAvailable:q.quality.independentLossPercent!==null,status,error:message});
     try {
       await assertWallet();
       const output=outputAddress(preview.outputToken);
@@ -1614,8 +1643,9 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
               checkScope(captured);
               // Preserve the approved absolute floor, not a newly shifted slippage band.
               preserveMinimum(q.quote.minimum,fresh.buyAmount);
-              if(fresh.priceImpact>5&&!q.forceHighSlippage)throw new Error('Price impact changed. Review a new quote.');
-              return {...q,quote:{...fresh,minimum:q.quote.minimum}};
+              const quality=quoteValueQuality(q.token,fresh,preview.outputToken,preview.outputDecimals,preview.outputPriceObservation,q.quote.minimum);
+              assertRefreshedQuoteValue(q.quality,quality,q.riskConsent);
+              return {...q,quality,quote:{...fresh,minimum:q.quote.minimum},inputValueUsd:quality.inputUsd??0,quotedOutputUsd:quality.outputUsd??0,lossPercent:quality.independentLossPercent??fresh.priceImpact};
             }catch(e){
               checkScope(captured);
               if(isOperationBlocker(e))throw e;
@@ -1675,6 +1705,7 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
         if(network===8453&&gas>16_000_000n)throw new Error('This batch is too large. Select fewer tokens and review again.');
         request.gas=gas;
         if(engine)await engine.recheckBaseNativeBatch(publicClient as unknown as BaseNativeClient,batch,account);
+        for(const q of rows)assertRefreshedQuoteValue(q.quality,quoteValueQuality(q.token,q.quote,preview.outputToken,preview.outputDecimals,preview.outputPriceObservation,q.quote.minimum),q.riskConsent);
         setProgressStep(`Confirm batch ${groupIndex+1} of ${groups.length} in your wallet…`);
         awaitingSwap=rows;
         const receipt=await groupSend(request,`Sweep batch ${groupIndex+1}`);
@@ -1827,31 +1858,27 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
               
               <div className="grid grid-cols-3 gap-4 mt-4">
                 <div className="bg-slate-900/50 rounded-lg p-3">
-                  <p className="text-xs text-slate-400">Input Value</p>
+                  <p className="text-xs text-slate-400">Independent Input Value</p>
                   <p className="text-lg font-bold text-white">
-                    {formatUSD(quotePreviewData.quotes
-                      .filter((q: QuotePreviewItem) => q.selected)
-                      .reduce((sum: number, q: QuotePreviewItem) => sum + q.inputValueUsd, 0))}
+                    {quotePreviewData.quotes.some(q=>q.selected&&q.quality.inputUsd===null)?'Unavailable':formatUSD(quotePreviewData.quotes.filter(q=>q.selected).reduce((sum,q)=>sum+q.inputValueUsd,0))}
                   </p>
                 </div>
                 <div className="bg-slate-900/50 rounded-lg p-3">
                   <p className="text-xs text-slate-400">You'll Receive</p>
-                  <p className="text-lg font-bold text-emerald-400">
-                    {formatUSD(quotePreviewData.quotes
-                      .filter((q: QuotePreviewItem) => q.selected)
-                      .reduce((sum: number, q: QuotePreviewItem) => sum + q.quotedOutputUsd, 0))}
+                  <p className="text-lg font-bold text-white">
+                    {quotePreviewData.quotes.some(q=>q.selected&&q.quality.outputUsd===null)?'USD unavailable':formatUSD(quotePreviewData.quotes.filter(q=>q.selected).reduce((sum,q)=>sum+q.quotedOutputUsd,0))}
                   </p>
                 </div>
                 <div className="bg-slate-900/50 rounded-lg p-3">
-                  <p className="text-xs text-slate-400">Price Impact</p>
+                  <p className="text-xs text-slate-400">Independent Value Loss</p>
                   {(() => {
                     const selectedQuotes = quotePreviewData.quotes.filter((q: QuotePreviewItem) => q.selected);
                     const totalInput = selectedQuotes.reduce((sum: number, q: QuotePreviewItem) => sum + q.inputValueUsd, 0);
-                    const weightedImpact = totalInput > 0 
-                      ? selectedQuotes.reduce((sum: number, q: QuotePreviewItem) => sum + (q.lossPercent * q.inputValueUsd), 0) / totalInput
-                      : 0;
+                    if(!selectedQuotes.length||selectedQuotes.some(q=>q.quality.independentLossPercent===null)||totalInput<=0)return <p className="text-lg font-bold text-amber-300">Unavailable</p>;
+                    const weightedImpact = Math.max(0,(1-selectedQuotes.reduce((sum,q)=>sum+q.quotedOutputUsd,0)/totalInput)*100);
+                    const fair=selectedQuotes.every(q=>q.quality.defaultSelected);
                     return (
-                      <p className={`text-lg font-bold ${weightedImpact > 2 ? 'text-red-400' : weightedImpact > 0.5 ? 'text-yellow-400' : 'text-emerald-400'}`}>
+                      <p className={`text-lg font-bold ${fair?'text-emerald-400':'text-red-400'}`}>
                         {weightedImpact > 0.01 ? `-${weightedImpact.toFixed(2)}%` : '~0%'}
                       </p>
                     );
@@ -1868,7 +1895,7 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
                     <th className="text-left pb-3">Token</th>
                     <th className="text-right pb-3">Input Value</th>
                     <th className="text-right pb-3">You Receive</th>
-                    <th className="text-right pb-3 pr-2">Impact</th>
+                    <th className="text-right pb-3 pr-2">Cost / Value Review</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-700/50">
@@ -1882,14 +1909,15 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
                           type="checkbox"
                           checked={quoteData.selected}
                           onChange={() => toggleQuoteSelection(quoteData.token.address)}
+                          aria-label={`Include ${quoteData.token.symbol} in sweep`}
                           className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-emerald-500 focus:ring-emerald-500"
                         />
                       </td>
                       <td className="py-3">
                         <div className="flex items-center gap-2">
-                          {quoteData.lossPercent > 5 ? (
+                          {(quoteData.quality.independentLossPercent!==null&&quoteData.quality.independentLossPercent>5)||quoteData.quote.priceImpact>5 ? (
                             <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
-                          ) : quoteData.lossPercent > 1 ? (
+                          ) : !quoteData.quality.defaultSelected ? (
                             <AlertTriangle className="w-4 h-4 text-yellow-400 flex-shrink-0" />
                           ) : (
                             <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />
@@ -1901,33 +1929,28 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
                         <span className="text-slate-300">{quoteData.inputValueUsd>0?formatUSD(quoteData.inputValueUsd):"—"}</span>
                       </td>
                       <td className="py-3 text-right">
-                        <span className="text-emerald-400 font-medium">{formatNumber(Number(quoteData.quote.buyAmountFormatted),6)} {quotePreviewData.outputToken}</span><p className="text-xs text-slate-400">Minimum share {formatUnits(quoteData.quote.minimum,quotePreviewData.outputDecimals)}</p>
+                        <span className={`${quoteData.quality.defaultSelected?'text-emerald-400':'text-slate-200'} font-medium`}>{formatNumber(Number(quoteData.quote.buyAmountFormatted),6)} {quotePreviewData.outputToken}</span><p className="text-xs text-slate-400">Minimum share {formatUnits(quoteData.quote.minimum,quotePreviewData.outputDecimals)}</p>
                       </td>
                       <td className="py-3 text-right pr-2">
-                        <div className="flex items-center justify-end gap-2">
-                          <span className={`font-medium ${
-                            quoteData.lossPercent > 5 ? 'text-red-400' : 
-                            quoteData.lossPercent > 1 ? 'text-yellow-400' : 
-                            'text-emerald-400'
-                          }`}>
-                            {quoteData.lossPercent > 0.01 ? `-${quoteData.lossPercent.toFixed(2)}%` : '~0%'}
-                          </span>
-                          {quoteData.lossPercent > 5 && quoteData.selected && (
+                        <div className="text-xs text-slate-300">{quoteData.quote.native?'Pool cost':'Quote cost'}: {quoteData.quote.priceImpact.toFixed(2)}%</div>
+                        <div className={`text-sm font-medium ${quoteData.quality.independentLossPercent===null?'text-amber-300':quoteData.quality.independentLossPercent>5?'text-red-400':quoteData.quality.defaultSelected?'text-emerald-400':'text-amber-300'}`}>
+                          {quoteData.quality.independentLossPercent===null?'Independent value unavailable':`Independent loss: ${quoteData.quality.independentLossPercent.toFixed(2)}%`}
+                        </div>
+                        {quoteData.quote.priceImpact>5 ? <p className="text-xs text-red-400">Route cost exceeds the 5% limit. Held.</p> : (
+                          !quoteData.quality.defaultSelected && quoteData.selected && (
                             <button
-                              onClick={() => toggleForceSlippage(quoteData.token.address)}
+                              onClick={() => toggleValueRiskConsent(quoteData.token.address)}
                               className={`text-xs px-2 py-0.5 rounded transition-colors ${
-                                quoteData.forceHighSlippage
+                                quoteData.riskConsent
                                   ? 'bg-orange-500/30 text-orange-300 border border-orange-500/50'
                                   : 'bg-slate-700 text-slate-400 hover:bg-slate-600 hover:text-slate-300'
                               }`}
-                              title={quoteData.forceHighSlippage 
-                                ? 'High price impact accepted; the displayed minimum remains protected'
-                                : 'Accept this price impact while keeping the displayed minimum'}
+                              aria-pressed={!!quoteData.riskConsent}
                             >
-                              {quoteData.forceHighSlippage ? '⚠️ Forced' : 'Force'}
+                              {quoteData.riskConsent?'Accepted: ': 'Accept: '}{quoteData.quality.independentLossPercent===null?'trade without independent valuation':`up to ${(Math.ceil(quoteData.quality.maximumLossAtMinimumPercent!*100)/100).toFixed(2)}% independent value loss`}
                             </button>
-                          )}
-                        </div>
+                          )
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -1967,22 +1990,14 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
               )}
             </div>
             
-            {quotePreviewData.quotes.some((q: QuotePreviewItem) => q.selected && q.lossPercent > 5) && (
-              <div className="mx-4 mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
-                <div className="flex items-center gap-2 text-red-400">
+            {quotePreviewData.quotes.some(q=>q.selected&&!q.quality.defaultSelected) && (
+              <div className="mx-4 mb-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                <div className="flex items-center gap-2 text-amber-300">
                   <AlertTriangle className="w-4 h-4" />
                   <span className="text-sm font-medium">
-                    {quotePreviewData.quotes.some((q: QuotePreviewItem) => q.selected && q.lossPercent > 5 && !q.forceHighSlippage) 
-                      ? <>High-impact tokens ({quotePreviewData.quotes.filter((q: QuotePreviewItem) => q.selected && q.lossPercent > 5 && !q.forceHighSlippage).length}) require "Force" to swap.</>
-                      : <>Some tokens have &gt;5% price impact.</>
-                    }
+                    Selected tokens with high independent loss or unavailable valuation require their own explicit acceptance. Route cost above 5% stays held.
                   </span>
                 </div>
-                {quotePreviewData.quotes.some((q: QuotePreviewItem) => q.selected && q.forceHighSlippage) && (
-                  <div className="mt-2 text-xs text-orange-400">
-                    ⚠️ Force enabled for {quotePreviewData.quotes.filter((q: QuotePreviewItem) => q.selected && q.forceHighSlippage).length} token(s)
-                  </div>
-                )}
               </div>
             )}
             
@@ -1998,12 +2013,12 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
               </button>
               <button
                 onClick={executeConfirmedSwaps}
-                disabled={!quotePreviewData.quotes.some((q: QuotePreviewItem) => q.selected && (q.lossPercent <= 5 || q.forceHighSlippage))}
+                disabled={!quotePreviewData.quotes.some(q=>q.selected&&quoteValueExecutable(q.quality,q.riskConsent))}
                 className="flex-1 py-3 px-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 disabled:from-slate-600 disabled:to-slate-600 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-all duration-200"
               >
                 {(() => {
-                  const executable = quotePreviewData.quotes.filter((q: QuotePreviewItem) => q.selected && (q.lossPercent <= 5 || q.forceHighSlippage)).length;
-                  const skipped = quotePreviewData.quotes.filter((q: QuotePreviewItem) => q.selected && q.lossPercent > 5 && !q.forceHighSlippage).length;
+                  const executable = quotePreviewData.quotes.filter(q=>q.selected&&quoteValueExecutable(q.quality,q.riskConsent)).length;
+                  const skipped = quotePreviewData.quotes.filter(q=>q.selected&&!quoteValueExecutable(q.quality,q.riskConsent)).length;
                   return skipped > 0 
                     ? `Confirm Sweep (${executable} tokens, ${skipped} skipped)`
                     : `Confirm Sweep (${executable} tokens)`;
@@ -2064,6 +2079,7 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
                   {(() => {
                     if(!swapResults?.valuationAvailable)return <p className="text-lg text-slate-400">—</p>;
                     const successfulResults = detailedResults.filter((r: SwapResultDetail) => r.status === 'success');
+                    if(!successfulResults.length||successfulResults.some(r=>!r.independentValuationAvailable))return <p className="text-lg text-amber-300">Unavailable</p>;
                     const totalInput = successfulResults.reduce((sum: number, r: SwapResultDetail) => sum + r.inputValueUsd, 0);
                     const totalReceived = swapResults?.totalValue || 0;
                     const impactPercent = totalInput > 0 ? ((totalReceived - totalInput) / totalInput) * 100 : 0;
@@ -2137,17 +2153,17 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
                           )}
                         </td>
                         <td className="py-3 text-right">
-                          <span className="text-slate-400">{formatUSD(result.inputValueUsd)}</span>
+                          <span className="text-slate-400">{result.independentValuationAvailable?formatUSD(result.inputValueUsd):'Unavailable'}</span>
                         </td>
                         <td className="py-3 text-right">
-                          {result.status === 'success' ? (
+                          {result.status === 'success' && result.independentValuationAvailable ? (
                             <span className="text-emerald-400">{formatUSD(result.quotedOutputUsd)}</span>
                           ) : (
                             <span className="text-slate-500">—</span>
                           )}
                         </td>
                         <td className="py-3 text-right pr-2">
-                          {result.status === 'success' ? (
+                          {result.status === 'success' && !result.independentValuationAvailable ? <span className="text-amber-300">Unavailable</span> : result.status === 'success' ? (
                             <span className={`font-medium ${
                               impactPercent < -5 ? 'text-red-400' : 
                               impactPercent < -2 ? 'text-yellow-400' : 
@@ -2383,6 +2399,7 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
                               const priceData = prices[addr.toLowerCase()];
                               newToken.price = priceData?.price || 0;
                               newToken.priceSource = priceData?.source as TokenInfo['priceSource'] || 'unknown';
+                              newToken.priceObservation = priceData?.observation;
                               newToken.valueUsd = balanceNum * newToken.price;
                               
                               checkScope(captured);
@@ -2754,6 +2771,7 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 10 }}
               className="mt-4 p-4 bg-red-500/10 border border-red-500/30 rounded-xl"
+              role="alert"
             >
               <div className="flex items-center gap-3">
                 <AlertTriangle className="w-5 h-5 text-red-400" />

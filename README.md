@@ -82,7 +82,7 @@ cp .env.example .env.local
 
 | Variable | Description | Get From |
 |----------|-------------|----------|
-| `NEXT_PUBLIC_ALCHEMY_KEY` | Enhanced token scanning | [Alchemy](https://www.alchemy.com/) |
+| `ALCHEMY_API_KEY` | Server-only discovery in the guarded Pages Worker | [Alchemy](https://www.alchemy.com/) |
 | `MORALIS_API_KEY` | Fallback token discovery | [Moralis](https://moralis.io/) |
 
 #### Optional RPC URLs
@@ -207,20 +207,19 @@ encodePacked(['address', 'bytes'], [
 
 ### Cloudflare Pages (Recommended)
 
-1. Push to GitHub
-2. Connect repo to Cloudflare Pages
-3. Build settings:
-   - Framework: `Next.js`
-   - Build command: `npx @cloudflare/next-on-pages@1`
-   - Output directory: `.vercel/output/static`
-4. Add environment variables
-5. Deploy
+Publication of this review candidate is held pending outside review and owner
+approval. Follow [the discovery release runbook](edge/DISCOVERY_RELEASE.md).
+The required build command is `npm run build:pages`, with output
+`.vercel/output/static`. It wraps the existing adapter in the native discovery
+guard and verifies the resulting entry and source hashes. Discovery also needs
+the dedicated shared `DISCOVERY_DB` binding with its schema applied. An absent
+binding or guard returns 503 before any discovery provider can be called.
+Keep provider keys server-only; no new browser API key is required.
 
 ### Vercel
 
-```bash
-vercel
-```
+Plain Next/Vercel deployments intentionally leave discovery unavailable. The
+native Cloudflare guard must be present for provider discovery to function.
 
 ### Manual Build
 

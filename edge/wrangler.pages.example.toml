@@ -1,0 +1,13 @@
+# Proposed Pages bindings only. Do not deploy this placeholder file.
+# Owner-approved provisioning and schema application are separate release gates.
+name = "iaero-sweeper"
+pages_build_output_dir = ".vercel/output/static"
+compatibility_date = "2026-07-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DISCOVERY_DB"
+database_name = "iaero-sweeper-discovery"
+database_id = "REPLACE_WITH_DEDICATED_DATABASE_UUID"
+# Bind the SAME primary database to every public discovery route/hostname.
+# Do not enable read replication or reuse a protocol/accounting database.

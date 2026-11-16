@@ -1,0 +1,36 @@
+M01 independent-value review safeguard (publication remains HOLD)
+
+Page quotes carry two separate assessments: native pool/route cost and loss
+against existing independent USD observations. Neither replaces the other.
+Default selection and a green row require both assessments to be known and at
+most 5%. A small native pool impact cannot authorize a poor independent rate.
+Route cost above 5% is held; the old generic Force switch is removed.
+
+Independent prices must be positive, finite, chain/token-bound DefiLlama or
+CoinGecko observations. Provider timestamps are retained when supplied. For the
+existing numeric CoinGecko response (or a provider omitting a timestamp), the
+retrieval time is explicitly recorded as retrieval-time provenance. Both the
+observation and original retrieval expire after five minutes; cache reads never
+restart either. Old cache entries without provenance, hardcoded stablecoin pegs,
+and swap-derived prices remain ineligible. These are market estimates, not an
+oracle guarantee of realizable value. No API or provider-policy change is made.
+
+The page reuses current scan observations. Only missing/stale selected inputs and
+the output are requested through the existing bounded bulk price reader at the
+user's Review action. There is no new startup scan, eager quoting, per-token new
+price endpoint, or transaction dependency beyond the displayed review safeguard.
+
+Unknown independent valuation is unselected and amber. If manually selected,
+trading requires the separate explicit "trade without independent valuation"
+acceptance for that review. High known independent loss instead requires explicit
+acceptance of its displayed maximum loss at the already-reviewed raw minimum.
+Those two consents cannot substitute for each other. Consent is scoped to wallet,
+chain, exact amount/minimum, tokens and original independent price observations.
+An unchanged unknown estimate may proceed only under its own explicit acceptance.
+
+Every execution refresh recomputes both assessments and rechecks consent. A fair
+quote can move within the 5% band and its original absolute execution floor.
+High-loss consent cannot exceed its displayed minimum-derived loss; expired or
+changed observations require another review. Original exact caps, raw output
+floors, native proofs, fee encoding, receipt/journal and cancellation guards are
+unchanged. This is source/test preparation only, not permission to publish.

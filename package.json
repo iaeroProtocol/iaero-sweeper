@@ -5,11 +5,13 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:pages": "npx --yes @cloudflare/next-on-pages@1.13.16 && node scripts/harden-pages.mjs && node scripts/verify-pages.mjs",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test --test-concurrency=2 src/lib/*.test.mjs",
-    "check:release": "node scripts/check-release.mjs"
+    "test": "node --experimental-strip-types --test --test-concurrency=2 src/lib/*.test.mjs edge/discovery-gateway.test.mjs scripts/*.test.mjs",
+    "check:release": "node scripts/check-release.mjs",
+    "check:pages": "node scripts/verify-pages.mjs"
   },
   "dependencies": {
     "@rainbow-me/rainbowkit": "^2.2.10",
@@ -31,6 +33,7 @@
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "autoprefixer": "^10.0.1",
+    "esbuild": "0.28.2",
     "eslint": "^8",
     "eslint-config-next": "14.1.4",
     "postcss": "^8",

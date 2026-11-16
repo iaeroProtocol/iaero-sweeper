@@ -56,3 +56,5 @@ coverage/
 .next-repair/
 
 .next-fixed/
+
+.next-audit/
