@@ -39,6 +39,7 @@ export function currentIndependentPrice(value: IndependentPrice | undefined, cha
 }
 
 export type QuoteValueQuality = {
+  readonly scopeKey: string;
   reviewKey: string;
   routeCostPercent: number | null;
   inputUsd: number | null;
@@ -72,8 +73,10 @@ export function assessQuoteValue(input: {
   const loss = known ? Math.max(0, (1 - outputUsd / inputUsd) * 100) : null;
   const minimumLoss = known ? Math.max(0, (1 - minimumUsd / inputUsd) * 100) : null;
   const cost = Number.isFinite(input.routeCostPercent) && input.routeCostPercent >= 0 ? input.routeCostPercent : null;
+  const scope = [input.context, input.chainId, input.tokenIn.toLowerCase(), input.tokenOut.toLowerCase()];
   return {
-    reviewKey: JSON.stringify([input.context, input.chainId, input.tokenIn.toLowerCase(), input.tokenOut.toLowerCase(), inputPrice ?? null, outputPrice ?? null]),
+    scopeKey: JSON.stringify(scope),
+    reviewKey: JSON.stringify([...scope, inputPrice ?? null, outputPrice ?? null]),
     routeCostPercent: cost, inputUsd: known ? inputUsd : null, outputUsd: known ? outputUsd : null,
     independentLossPercent: loss, maximumLossAtMinimumPercent: minimumLoss,
     defaultSelected: cost !== null && cost <= VALUE_REVIEW_LIMIT_PERCENT && loss !== null && loss <= VALUE_REVIEW_LIMIT_PERCENT,
@@ -96,7 +99,40 @@ export function quoteValueExecutable(quality: QuoteValueQuality, consent?: Value
 }
 
 export function assertRefreshedQuoteValue(original: QuoteValueQuality, fresh: QuoteValueQuality, consent?: ValueRiskConsent): void {
-  if (original.reviewKey !== fresh.reviewKey || !quoteValueExecutable(original, consent) || !quoteValueExecutable(fresh, consent)) {
+  // Scope stays wallet/raw-cap/original-floor/chain/asset bound while CURRENT
+  // independent observations may renew. Consent still belongs exclusively to
+  // the ORIGINAL price-bound reviewKey and its exact displayed floor-derived
+  // ceiling; a renewed observation never creates or rewrites consent.
+  const percent = (value: number | null): value is number => value !== null && Number.isFinite(value) && value >= 0;
+  const originalConsent = consent === undefined || consent.reviewKey === original.reviewKey && (
+    original.independentLossPercent === null
+      ? consent.kind === 'valuation-unavailable'
+      : consent.kind === 'independent-loss' && percent(original.maximumLossAtMinimumPercent)
+        && consent.maximumLossPercent === original.maximumLossAtMinimumPercent
+  );
+  const sameScope = typeof original.scopeKey === 'string' && original.scopeKey.length > 0
+    && original.scopeKey === fresh.scopeKey;
+  const freshCostAllowed = percent(fresh.routeCostPercent) && fresh.routeCostPercent <= VALUE_REVIEW_LIMIT_PERCENT;
+  const freshFair = percent(fresh.independentLossPercent) && fresh.independentLossPercent <= VALUE_REVIEW_LIMIT_PERCENT;
+  let valueAllowed = false;
+  if (original.independentLossPercent === null) {
+    // Explicitly accepted unknown risk may remain unknown or improve to a fair
+    // known estimate. It cannot authorize newly discovered severe known loss.
+    valueAllowed = consent?.kind === 'valuation-unavailable'
+      && (fresh.independentLossPercent === null || freshFair);
+  } else if (percent(original.independentLossPercent) && original.independentLossPercent <= VALUE_REVIEW_LIMIT_PERCENT) {
+    // A fair review retains its existing5% band, rather than freezing the exact
+    // original displayed percentage. Raw execution floors remain independent.
+    valueAllowed = freshFair;
+  } else if (percent(original.independentLossPercent) && consent?.kind === 'independent-loss'
+    && percent(original.maximumLossAtMinimumPercent)) {
+    // Both the new quote AND the already-reviewed raw minimum must stay inside
+    // the original explicit maximum under current independent prices.
+    valueAllowed = percent(fresh.independentLossPercent) && percent(fresh.maximumLossAtMinimumPercent)
+      && fresh.independentLossPercent <= original.maximumLossAtMinimumPercent
+      && fresh.maximumLossAtMinimumPercent <= original.maximumLossAtMinimumPercent;
+  }
+  if (!sameScope || !originalConsent || !quoteValueExecutable(original, consent) || !freshCostAllowed || !valueAllowed) {
     throw new Error('Independent value or route cost changed beyond this review. Review a new quote.');
   }
 }

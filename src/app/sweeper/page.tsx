@@ -9,6 +9,7 @@ import { independentPrice, currentIndependentPrice, assessQuoteValue, acceptValu
 import { discoveryFailureMessage, discoveredTokenAddresses } from '@/lib/sweep-discovery-ui';
 import { inventoryHasDisplayPrice, sweepInventory } from '@/lib/sweep-inventory';
 import { bindSubmittedWalletRequest } from '@/lib/sweep-transaction-proof';
+import { createExecutionPriceReader } from '@/lib/sweep-execution-prices';
 import { 
   useAccount, 
   usePublicClient, 
@@ -1672,6 +1673,21 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
     try {
       await assertWallet();
       const output=outputAddress(preview.outputToken);
+      const readExecutionPrices=createExecutionPriceReader({chainId:network,read:inputs=>fetchMarketPrices(inputs.map(input=>({...input,address:input.address as Address})),network,output)});
+      const executionValuations=async(rows:readonly QuotePreviewItem[])=>{
+        const observations=await readExecutionPrices([
+          ...rows.map(q=>q.token),
+          {address:output,decimals:preview.outputDecimals,balance:0n,symbol:preview.outputToken,priceObservation:preview.outputPriceObservation},
+        ]);
+        checkScope(captured);
+        return {
+          outputPrice:observations.get(output.toLowerCase()),
+          token:(q:QuotePreviewItem)=>{
+            const observation=observations.get(q.token.address.toLowerCase());
+            return {...q.token,priceObservation:observation,price:observation?.price??0,priceSource:observation?.source??'unknown' as const};
+          },
+        };
+      };
       const swapperCode=await publicClient.getCode({address:config.swapper});
       if(chosen.some(q=>!q.quote.native)&&!swapperCode?.includes('810fdc5a'))throw new Error('The required output protection is unavailable on this network.');
       // Route-homogeneous batches preserve exact input caps and independent output floors.
@@ -1689,16 +1705,20 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
         const native=()=>nativePromise??=loadNative();
         const refresh=async()=>{
           const candidates=original.filter(q=>!results.some(r=>sameAddress(r.tokenIn,q.token.address)));
-          const values=await mapBounded(candidates,4,async q=>{
+          const valuations=await executionValuations(candidates);
+          const values=await mapBounded(candidates,4,async(q):Promise<QuotePreviewItem|null>=>{
             checkScope(captured);
             try{
-              const fresh=await quoteToken(q.token,preview.outputToken,preview.outputPrice,native,q.quote.native?'native':'0x');
+              const token=valuations.token(q);
+              const fresh=await quoteToken(token,preview.outputToken,valuations.outputPrice?.price??0,native,q.quote.native?'native':'0x');
               checkScope(captured);
               // Preserve the approved absolute floor, not a newly shifted slippage band.
               preserveMinimum(q.quote.minimum,fresh.buyAmount);
-              const quality=quoteValueQuality(q.token,fresh,preview.outputToken,preview.outputDecimals,preview.outputPriceObservation,q.quote.minimum);
+              const quality=quoteValueQuality(token,fresh,preview.outputToken,preview.outputDecimals,valuations.outputPrice,q.quote.minimum);
               assertRefreshedQuoteValue(q.quality,quality,q.riskConsent);
-              return {...q,quality,quote:{...fresh,minimum:q.quote.minimum},inputValueUsd:quality.inputUsd??0,quotedOutputUsd:quality.outputUsd??0,lossPercent:quality.independentLossPercent??fresh.priceImpact};
+              // Keep the ORIGINAL assessment and consent as the review anchor.
+              // Renewed evidence must never replace its accepted risk ceiling.
+              return {...q,token,quote:{...fresh,minimum:q.quote.minimum},inputValueUsd:quality.inputUsd??0,quotedOutputUsd:quality.outputUsd??0,lossPercent:quality.independentLossPercent??fresh.priceImpact};
             }catch(e){
               checkScope(captured);
               if(isOperationBlocker(e))throw e;
@@ -1758,7 +1778,9 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
         if(network===8453&&gas>16_000_000n)throw new Error('This batch is too large. Select fewer tokens and review again.');
         request.gas=gas;
         if(engine)await engine.recheckBaseNativeBatch(publicClient as unknown as BaseNativeClient,batch,account);
-        for(const q of rows)assertRefreshedQuoteValue(q.quality,quoteValueQuality(q.token,q.quote,preview.outputToken,preview.outputDecimals,preview.outputPriceObservation,q.quote.minimum),q.riskConsent);
+        const finalValuations=await executionValuations(rows);
+        for(const q of rows)assertRefreshedQuoteValue(q.quality,quoteValueQuality(finalValuations.token(q),q.quote,preview.outputToken,preview.outputDecimals,finalValuations.outputPrice,q.quote.minimum),q.riskConsent);
+        if(rows.some(q=>Date.now()-q.quote.quotedAt>QUOTE_TTL_MS))throw new Error('Quotes expired. Review fresh quotes.');
         setProgressStep(`Confirm batch ${groupIndex+1} of ${groups.length} in your wallet…`);
         awaitingSwap=rows;
         const receipt=await groupSend(request,`Sweep batch ${groupIndex+1}`);

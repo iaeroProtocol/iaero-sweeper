@@ -17,8 +17,12 @@ oracle guarantee of realizable value. No API or provider-policy change is made.
 
 The page reuses current scan observations. Only missing/stale selected inputs and
 the output are requested through the existing bounded bulk price reader at the
-user's Review action. There is no new startup scan, eager quoting, per-token new
-price endpoint, or transaction dependency beyond the displayed review safeguard.
+user's Review action and during execution refresh/final checks. Execution uses a
+local cache shared by batches; current evidence adds zero price calls, expired
+evidence renews together in bulk, and unavailable observations retry at most once
+per thirty seconds. A returned observation is validated again at completion.
+There is no new startup scan, eager quoting or per-token price endpoint. Existing
+reader deadlines, concurrency and hosted shared budgets remain authoritative.
 
 Unknown independent valuation is unselected and amber. If manually selected,
 trading requires the separate explicit "trade without independent valuation"
@@ -26,11 +30,19 @@ acceptance for that review. High known independent loss instead requires explici
 acceptance of its displayed maximum loss at the already-reviewed raw minimum.
 Those two consents cannot substitute for each other. Consent is scoped to wallet,
 chain, exact amount/minimum, tokens and original independent price observations.
-An unchanged unknown estimate may proceed only under its own explicit acceptance.
+The original price-bound reviewKey authorizes consent; a separate immutable
+scopeKey binds wallet, chain, assets and exact raw cap/original minimum. Renewed
+evidence never replaces the original review or expands its accepted risk class.
 
 Every execution refresh recomputes both assessments and rechecks consent. A fair
 quote can move within the 5% band and its original absolute execution floor.
-High-loss consent cannot exceed its displayed minimum-derived loss; expired or
-changed observations require another review. Original exact caps, raw output
-floors, native proofs, fee encoding, receipt/journal and cancellation guards are
-unchanged. This is source/test preparation only, not permission to publish.
+Known fair reviews require fresh known quoted loss at most 5%. Explicit high-loss
+consent requires BOTH fresh quoted loss and loss at the original raw minimum to
+stay within its exact originally accepted ceiling. A known valuation becoming
+unknown requires review. Explicit unknown-value consent may stay unknown or
+improve to a known fair valuation, but cannot authorize newly known severe loss.
+Changed intent, forged consent, unavailable required evidence or loss/cost outside
+these bounds still requires review. Genuine new timestamps and harmless price
+movement within those bounds do not invalidate consent. Original exact caps, raw
+output floors, native proofs, fee encoding, receipt/journal and cancellation
+guards are unchanged. This is local preparation only, not permission to publish.
