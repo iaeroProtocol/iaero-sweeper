@@ -4,8 +4,10 @@ import {DatabaseSync} from 'node:sqlite';
 import {readFile} from 'node:fs/promises';
 import {createKeyedApiGateway} from './keyed-api-gateway.mjs';
 import {parsePriceRequest} from '../src/lib/coingecko-read-api.ts';
+import {parseQuoteRequest,READ_API_CHAINS} from '../src/lib/sweeper-read-api.ts';
 const address=n=>'0x'+BigInt(n).toString(16).padStart(40,'0');
 const wallet=address(10),token=address(11),keys=['ZERO_EX_API_KEY','COINGECKO_API_KEY','ALCHEMY_API_KEY'];
+const quoteParams=()=>new URLSearchParams({chainId:'8453',sellToken:token,buyToken:address(12),sellAmount:'1000000',taker:READ_API_CHAINS['8453'].swapper,slippageBps:'30',txOrigin:wallet});
 const schemas=await Promise.all(['provider-budget-schema.sql','discovery-schema.sql'].map(file=>readFile(new URL(file,import.meta.url),'utf8')));
 globalThis.fetch=async()=>{throw new Error('No network in gateway tests');};
 function setup({schema=true,discoverySchema=true}={}) {
@@ -14,7 +16,7 @@ function setup({schema=true,discoverySchema=true}={}) {
  const binding={prepare(sql){state.statements++;const stmt=db.prepare(sql);let values=[];return{bind(...input){values=input;return this;},async first(){return stmt.get(...values)??null;},async run(){stmt.run(...values);return{success:true};}};}};
  const env={DISCOVERY_DB:binding};
  for(const name of keys)Object.defineProperty(env,name,{get(){state.keyReads.push(name);return 'mock-'+name;}});
- const helpers={parsePriceRequest,
+ const helpers={parsePriceRequest,parseQuoteRequest,
   async discoverTokens(params,projected){state.calls.push({route:'discovery',wallet:params.get('wallet')});assert.equal(projected.ALCHEMY_API_KEY,'mock-ALCHEMY_API_KEY');return{status:200,data:{tokens:[token],count:1}};},
   async handleQuoteRequest(params,projected){assert.equal(projected.ZERO_EX_API_KEY,'mock-ZERO_EX_API_KEY');state.calls.push({route:'quote'});return{status:200,data:{buyAmount:'100'},headers:{'x-secret-provider':'must-not-escape'}};},
   async handlePriceRequest(parsed,projected){assert.equal(projected.COINGECKO_API_KEY,'mock-COINGECKO_API_KEY');state.calls.push({route:'prices',cost:parsed.cost,count:parsed.addresses.length});return{status:200,data:{prices:{[token]:1}},headers:{'retry-after':'30','access-control-allow-origin':'*'}};},
@@ -23,13 +25,17 @@ function setup({schema=true,discoverySchema=true}={}) {
 }
 function request(route='quote',{body,ip='192.0.2.1',method,query,cf=true,headers={},stream,signal}={}) {
  const path={quote:'/api/0x/quote',prices:'/api/coingecko/prices',discovery:'/api/tokens/discover'}[route]??route;
- const search=query??(route==='discovery'?`chainId=8453&wallet=${wallet}`:route==='quote'?'chainId=8453':'');
+ const search=query??(route==='discovery'?`chainId=8453&wallet=${wallet}`:route==='quote'?quoteParams().toString():'');
  const req=new Request('https://sweeper.invalid'+path+(search?'?'+search:''),{method:method??(route==='prices'?'POST':'GET'),
    headers:{'CF-Connecting-IP':ip,...(route==='prices'?{'Content-Type':'application/json'}:{}),...headers},
    ...(stream?{body:stream,duplex:'half'}:body!==undefined?{body:typeof body==='string'?body:JSON.stringify(body)}:{}),signal});
  if(cf)Object.defineProperty(req,'cf',{value:{colo:'LHR'}});return req;
 }
 const prices=(count=1)=>({chainId:8453,addresses:Array.from({length:count},(_,n)=>address(100+n))});
+const invalidQuoteQueries=()=>[
+ p=>p.delete('buyToken'),p=>p.append('sellAmount','2'),p=>p.set('recipient',wallet),p=>p.set('taker',wallet),
+ p=>p.set('sellAmount','0'),p=>p.set('sellAmount',(2n**256n).toString()),p=>p.set('chainId','999'),p=>p.set('slippageBps','501'),
+].map(change=>{const params=quoteParams();change(params);return params.toString();});
 function seedNearFull(s,remaining=1) {s.db.prepare("INSERT INTO provider_usage(client_hash,route,units,admitted_at) VALUES(?,'quote',1,unixepoch()-120)");
  const stmt=s.db.prepare("INSERT INTO provider_usage(client_hash,route,units,admitted_at) VALUES(?,'discovery',12,unixepoch()-120)");
  // Seed the shared hour total exactly4096-remaining using valid route weights.
@@ -43,6 +49,29 @@ test('all three keyed paths use one weighted primary before lazy provider bindin
   }
   assert.deepEqual(s.db.prepare('SELECT route,units FROM provider_usage ORDER BY id').all().map(r=>({...r})),[{route:'quote',units:1},{route:'prices',units:2},{route:'discovery',units:12}]);
   assert.deepEqual(s.state.calls.map(c=>c.route),['quote','prices','discovery']);assert.equal(s.db.prepare('SELECT count(*) n FROM discovery_attempts').get().n,1);
+ }finally{s.close();}
+});
+test('malformed quotes return400 before any SQL/debit/key read even when the shared global budget is full',async()=>{
+ for(const full of[false,true]){const s=setup();try{
+  if(full)seedNearFull(s,0);
+  const before=s.db.prepare('SELECT COALESCE(sum(units),0) n FROM provider_usage').get().n;
+  for(const query of invalidQuoteQueries()){
+   const r=await s.gateway(request('quote',{query}),s.env);assert.equal(r.status,400);assert.equal(r.headers.get('x-provider-budget-state'),'invalid');assert.equal((await r.json()).code,'INVALID_QUOTE_REQUEST');
+  }
+  assert.equal(s.state.statements,0);assert.deepEqual(s.state.keyReads,[]);assert.deepEqual(s.state.calls,[]);
+  assert.equal(s.db.prepare('SELECT COALESCE(sum(units),0) n FROM provider_usage').get().n,before);
+  assert.throws(()=>createKeyedApiGateway({...s.helpers,parseQuoteRequest:undefined}),/All bounded provider helpers are required/);
+ }finally{s.close();}}
+});
+test('invalid quote flood consumes no units and cannot starve following valid quote/prices/discovery',async()=>{
+ const s=setup();try{
+  const invalid=invalidQuoteQueries();for(let n=0;n<128;n++)assert.equal((await s.gateway(request('quote',{query:invalid[n%invalid.length]}),s.env)).status,400);
+  assert.equal(s.state.statements,0);assert.deepEqual(s.state.keyReads,[]);assert.equal(s.db.prepare('SELECT count(*) n FROM provider_usage').get().n,0);
+  assert.equal((await s.gateway(request('quote'),s.env)).status,200);
+  assert.equal((await s.gateway(request('prices',{body:prices(60)}),s.env)).status,200);
+  assert.equal((await s.gateway(request('discovery'),s.env)).status,200);
+  assert.deepEqual(s.db.prepare('SELECT route,units FROM provider_usage ORDER BY id').all().map(r=>({...r})),[{route:'quote',units:1},{route:'prices',units:2},{route:'discovery',units:12}]);
+  assert.deepEqual(s.state.calls.map(c=>c.route),['quote','prices','discovery']);
  }finally{s.close();}
 });
 test('missing D1 or new schema denies every valid keyed route with zero helper/key reads',async()=>{

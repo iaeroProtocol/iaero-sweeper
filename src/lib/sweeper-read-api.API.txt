@@ -8,6 +8,13 @@ Quote inputs: chainId,sellToken,buyToken,sellAmount,taker, optionalslippageBps(d
 andtxOrigin. Unknown/duplicate fields, recipient/value/fee overrides, zero/native-token
 placeholders, invalid uint256 amounts and slippage outside10..500 are rejected.
 All nine original chains remain; Base25f11..., Linea679e..., otherchains75f57... .
+parseQuoteRequest(URLSearchParams) is the same pure validator used by both the
+outer keyed gateway and handleQuoteRequest. It returns the validated original
+chain/token/raw amount/slippage/txOrigin fields or throws a fixed error. The
+gateway invokes it BEFORE any shared D1 admission/preparation or provider binding
+access. Malformed requests return400 without consuming units, including when
+the global budget is already full. Valid requests retain the existing1-unit
+admission, provider/key ordering, fees, floors and upstream behavior.
 Server binds taker AND recipient to that chain's existing RewardSwapper and sends
 the existing5bps fee to Treasury e6e7...5201 in buyToken. Existing SWAP_FEE_BPS /
 SWAP_FEE_RECIPIENT references remain; conflicting settings fail configuration review.
@@ -44,7 +51,7 @@ every wallet token was indexed or is sellable. Manual address entry remains need
 
 Fixed-origin/safe-error/deadline/concurrency tests:
  node --experimental-strip-types --test src/lib/sweeper-read-api.test.mjs
-Seven focused tests pass without network access or real credentials.
+Focused tests run without network access or real credentials.
 
 Primary API parameter reference checked2026-11-16:
 https://docs.0x.org/api-reference/evm-ap-is/swap/allowanceholder-getquote

@@ -35,11 +35,16 @@ export function bind0xQuote(data: any, expected: {sellToken: Address; buyToken: 
 export interface PendingSweep {
   version: 1; account: Address; chainId: number; target: Address; data: Hex; value: '0';
   hash?: Hex; originalHash?: Hex; nonce?: number; createdBlock?: string; createdAt: number; label: string;
+  nonceBaseline?: number; nonceVerified?: boolean;
 }
 export function pendingKey(account: Address, chainId: number) { return `iaero.sweeper.pending.v1.${chainId}.${account.toLowerCase()}`; }
 export function validatePending(value: unknown, account: Address, chainId: number): PendingSweep | null {
   const p = value as PendingSweep;
-  if (!p || p.version !== 1 || !sameAddress(String(p.account), account) || p.chainId !== chainId || !isAddress(p.target) || !/^0x[0-9a-fA-F]+$/.test(p.data) || p.value !== '0' || (p.hash && !/^0x[0-9a-fA-F]{64}$/.test(p.hash))) return null;
+  if (!p || p.version !== 1 || !sameAddress(String(p.account), account) || p.chainId !== chainId || !isAddress(p.target) || !/^0x[0-9a-fA-F]+$/.test(p.data) || p.value !== '0' || (p.hash && !/^0x[0-9a-fA-F]{64}$/.test(p.hash))
+    || p.originalHash!==undefined&&!/^0x[0-9a-fA-F]{64}$/.test(p.originalHash)
+    || p.nonceBaseline!==undefined&&(!Number.isSafeInteger(p.nonceBaseline)||p.nonceBaseline<0)
+    || p.nonceVerified!==undefined&&typeof p.nonceVerified!=='boolean'
+    || p.nonceVerified===true&&(!Number.isSafeInteger(p.nonce)||p.nonce!<0)) return null;
   return p;
 }
 export function matchesPending(p: PendingSweep, tx: {from: string; to: string | null; input: string; value: bigint}) {

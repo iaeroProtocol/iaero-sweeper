@@ -85,8 +85,8 @@ function lazyBindings(env,names) {
   return projected;
 }
 
-export function createKeyedApiGateway({discoverTokens,handleQuoteRequest,parsePriceRequest,handlePriceRequest}) {
-  if([discoverTokens,handleQuoteRequest,parsePriceRequest,handlePriceRequest].some(fn=>typeof fn!=='function')) {
+export function createKeyedApiGateway({discoverTokens,parseQuoteRequest,handleQuoteRequest,parsePriceRequest,handlePriceRequest}) {
+  if([discoverTokens,parseQuoteRequest,handleQuoteRequest,parsePriceRequest,handlePriceRequest].some(fn=>typeof fn!=='function')) {
     throw new TypeError('All bounded provider helpers are required');
   }
   const discovery=createDiscoveryGateway(discoverTokens);
@@ -99,6 +99,9 @@ export function createKeyedApiGateway({discoverTokens,handleQuoteRequest,parsePr
     let parsed,units=route==='discovery'?12:1;
     if(route==='discovery'&&!discoveryParams(url.searchParams)) {
       return failure(400,'INVALID_DISCOVERY_REQUEST','Invalid supported chain or wallet address.');
+    }
+    if(route==='quote') {
+      try {parseQuoteRequest(url.searchParams);}catch{return failure(400,'INVALID_QUOTE_REQUEST','Invalid chain, token, amount, taker, slippage or quote parameter.');}
     }
     if(route==='prices') {
       if(url.search)return failure(400,'INVALID_PRICE_REQUEST','Price request parameters belong in the JSON body.');

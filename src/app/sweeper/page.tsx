@@ -7,6 +7,8 @@ import { AERO, SLIPPAGE_BPS, QUOTE_TTL_MS, exactAmount, minimumOutput, preserveM
 import type { BaseNativeQuote, BaseNativeConfig, BaseNativeClient } from '@/lib/base-native-sweep';
 import { independentPrice, currentIndependentPrice, assessQuoteValue, acceptValueRisk, quoteValueExecutable, assertRefreshedQuoteValue, type IndependentPrice, type QuoteValueQuality, type ValueRiskConsent } from '@/lib/sweep-value-quality';
 import { discoveryFailureMessage, discoveredTokenAddresses } from '@/lib/sweep-discovery-ui';
+import { inventoryHasDisplayPrice, sweepInventory } from '@/lib/sweep-inventory';
+import { bindSubmittedWalletRequest } from '@/lib/sweep-transaction-proof';
 import { 
   useAccount, 
   usePublicClient, 
@@ -783,8 +785,10 @@ export default function TokenSweeperPage() {
 
   const [discoveryNotice, setDiscoveryNotice] = useState('');
   const [visibleCount, setVisibleCount] = useState(50);
+  const [inventoryQuery, setInventoryQuery] = useState('');
   const [isScanning, setIsScanning] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isReconciling, setIsReconciling] = useState(false);
   const [progressStep, setProgressStep] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [hasScanned, setHasScanned] = useState(false);
@@ -834,6 +838,7 @@ export default function TokenSweeperPage() {
     skipped: number;
     pending: number;
     problem?: string;
+    walletRequest?: {label:string;hash?:Hex};
     totalValue: number;
     totalOutput: string;
     outputToken: OutputToken;
@@ -841,7 +846,6 @@ export default function TokenSweeperPage() {
   } | null>(null);
   const [detailedResults, setDetailedResults] = useState<SwapResultDetail[]>([]);
   const [showResultsModal, setShowResultsModal] = useState(false);
-  const [showUnknownPriceTokens, setShowUnknownPriceTokens] = useState(false);
   const [lastScannedKey, setLastScannedKey] = useState<string | null>(null);  
 
   const config = CHAIN_CONFIG[chainId] || CHAIN_CONFIG[8453];
@@ -851,6 +855,7 @@ export default function TokenSweeperPage() {
   useEffect(() => {
     setTokens([]);
     setVisibleCount(50);
+    setInventoryQuery('');
     setSelectedTokens(new Set());
     setCustomAmounts({});
     setQuotePreviewData(null);
@@ -1533,22 +1538,56 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
     if(contextRef.current.key===`${network}:${account.toLowerCase()}`)setPending(record);
   };
   const reconcilePending = async () => {
-    if(isProcessing||!pending||!publicClient||!address||chainId!==pending.chainId||!sameAddress(address,pending.account))return;
+    if(sendLock.current||isProcessing||!pending||!publicClient||!address||chainId!==pending.chainId||!sameAddress(address,pending.account))return;
     const captured=scope();
+    sendLock.current=true;setIsReconciling(true);
     try {
+      const journalKey=pendingKey(address,chainId);
+      let journalSnapshot:string|null=JSON.stringify(pending);
+      const requireCurrentJournal=()=>{
+        checkScope(captured);
+        if(localStorage.getItem(journalKey)!==journalSnapshot)throw new Error('The saved wallet request changed. Refresh before checking it again.');
+      };
+      const saveReconciled=(value:PendingSweep|null)=>{
+        requireCurrentJournal();savePending(value,address,chainId);
+        journalSnapshot=value?JSON.stringify(value):null;
+      };
+      requireCurrentJournal();
       const hash=/^0x[0-9a-fA-F]{64}$/.test(recoveryHash)?recoveryHash as Hex:pending.hash;
       if(!hash)throw new Error('Paste the transaction hash from your wallet to check it.');
       const transaction=await publicClient.getTransaction({hash});
       let record=pending;
-      const kind=pendingTransactionKind(record,transaction);
+      let approvalProof:ReturnType<typeof bindSubmittedWalletRequest>['approvalProof'];
+      const anchor=record.originalHash??record.hash;
+      const isOriginal=!!anchor&&sameAddress(hash,anchor);
+      // A legacy pre-read nonce is only a baseline. Rebind it using the
+      // immutable hash already returned by the wallet and exact original intent.
+      // Old replacement journals already proved their original nonce before
+      // recording originalHash; hashless recovery retains its strict nonce gate.
+      if(isOriginal){
+        const bound=bindSubmittedWalletRequest(record,transaction,anchor);
+        record=bound;approvalProof=bound.approvalProof;saveReconciled(record);
+      }else if(record.hash && !record.nonceVerified && !record.originalHash){
+        const original=sameAddress(hash,record.hash)?transaction:await publicClient.getTransaction({hash:record.hash});
+        const bound=bindSubmittedWalletRequest(record,original);
+        record=bound;approvalProof=bound.approvalProof;saveReconciled(record);
+      }
+      if(!sameAddress(transaction.hash,hash)||transaction.chainId!==undefined&&transaction.chainId!==chainId)throw new Error('The transaction lookup does not match the saved hash or network.');
+      const kind=isOriginal?'intent':pendingTransactionKind(record,transaction);
       const receipt=await publicClient.getTransactionReceipt({hash});
       if(!record.createdBlock||receipt.blockNumber<BigInt(record.createdBlock)||receipt.transactionHash.toLowerCase()!==hash.toLowerCase()||(await publicClient.getBlock({blockNumber:receipt.blockNumber})).hash!==receipt.blockHash)throw new Error('Transaction confirmation is not canonical yet.');
+      if(kind==='intent'&&receipt.status==='success'&&approvalProof){
+        const required=BigInt(approvalProof.reviewedAmount);
+        const available=await publicClient.readContract({address:record.target,abi:ERC20_ABI,functionName:'allowance',args:[address,approvalProof.spender],blockNumber:receipt.blockNumber});
+        if(required===0n?available!==0n:available<required)throw new Error('The confirmed approval did not set the required allowance. Check this request before retrying.');
+      }
       checkScope(captured);
-      savePending(null,address,chainId);
+      saveReconciled(null);
       setError(kind==='replacement'?'The saved transaction was replaced or cancelled. Balances have been refreshed; review any remaining tokens.':receipt.status==='success'?'Transaction confirmed. Balances have been refreshed; review a new quote for any remaining tokens.':'Transaction reverted. No swap from this transaction was completed.');
       setRecoveryHash(''); setQuotePreviewData(null); setShowQuotePreview(false);
       await scanWalletTokens(true);
     } catch(e:any) { if(captured.key===contextRef.current.key&&captured.epoch===contextRef.current.epoch)setError(e?.name==='TransactionReceiptNotFoundError'?'Transaction is still pending. Check again before sending another transaction.':e?.message||'Could not confirm this transaction.'); }
+    finally {sendLock.current=false;setIsReconciling(false);}
   };
 
   const executeConfirmedSwaps = useCallback(async () => {
@@ -1593,21 +1632,35 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
         if(isProvenNotSubmitted(e))savePending(null,account,network);
         throw e;
       }
+      if(typeof hash!=='string'||!/^0x[0-9a-fA-F]{64}$/.test(hash))throw Object.assign(new Error('Your wallet did not return a transaction hash. Check its activity before retrying.'),{stopQueue:true});
       // Keep the original scope's journal even if the wallet changes while prompting.
       record={...record,hash};savePending(record,account,network);
+      if(contextRef.current.key===captured.key&&contextRef.current.epoch===captured.epoch)setTxHash(hash);
       // Capture the accepted nonce as soon as the transaction is visible.
       let visible:Awaited<ReturnType<typeof publicClient.getTransaction>>|undefined;
       try{visible=await publicClient.getTransaction({hash});}catch{/* Keep the hash held while the node catches up. */}
-      if(visible){if(!matchesPending(record,visible)||visible.nonce!==record.nonce)throw new Error('Wallet transaction differs from the reviewed request.');}
-      if(contextRef.current.key===captured.key&&contextRef.current.epoch===captured.epoch)setTxHash(hash);
+      if(visible){record=bindSubmittedWalletRequest(record,visible,hash);savePending(record,account,network);}
       const receipt=await publicClient.waitForTransactionReceipt({hash,timeout:90_000,onReplaced:replacement=>{
-        if(replacement.replacedTransaction.hash.toLowerCase()!==hash.toLowerCase()||!matchesPending(record,replacement.replacedTransaction)||replacement.replacedTransaction.nonce!==record.nonce)return;
-        record={...record,originalHash:hash,hash:replacement.transaction.hash};
-        savePending(record,account,network);
+        try{
+          const original=bindSubmittedWalletRequest(record,replacement.replacedTransaction,hash);
+          pendingTransactionKind(original,replacement.transaction);
+          if(!/^0x[0-9a-fA-F]{64}$/.test(replacement.transaction.hash))return;
+          record={...original,originalHash:hash,hash:replacement.transaction.hash};
+          savePending(record,account,network);
+        }catch{/* A replacement without original hash/intent proof stays held. */}
       }});
       const transaction=await publicClient.getTransaction({hash:receipt.transactionHash});
-      const kind=pendingTransactionKind(record,transaction);
+      if(!sameAddress(transaction.hash,receipt.transactionHash)||transaction.chainId!==undefined&&transaction.chainId!==network)throw new Error('Transaction confirmation does not match its hash or network.');
+      if(sameAddress(receipt.transactionHash,hash)){
+        record=bindSubmittedWalletRequest(record,transaction,hash);savePending(record,account,network);
+      }
+      const kind=sameAddress(receipt.transactionHash,hash)?'intent':pendingTransactionKind(record,transaction);
       if(receipt.blockNumber<BigInt(record.createdBlock!)||(await publicClient.getBlock({blockNumber:receipt.blockNumber})).hash!==receipt.blockHash)throw new Error('Transaction confirmation changed. Check again.');
+      if(kind==='intent'&&receipt.status==='success'&&request.functionName==='approve'){
+        const spender=request.args[0] as Address,required=BigInt(request.args[1]);
+        const available=await publicClient.readContract({address:request.address,abi:ERC20_ABI,functionName:'allowance',args:[account,spender],blockNumber:receipt.blockNumber});
+        if(required===0n?available!==0n:available<required)throw Object.assign(new Error('The confirmed approval did not set the required allowance. Check this request before retrying.'),{stopQueue:true});
+      }
       // Confirmation removes the pending gate; no timeout or RPC error does.
       savePending(null,account,network);
       if(kind==='replacement')throw new Error('The wallet transaction was replaced or cancelled. Re-scan and review before continuing.');
@@ -1746,7 +1799,7 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
       const pendingCount=results.filter(r=>r.status==='pending').length;
       const problem=stopReason||((skippedCount||pendingCount)?results.find(r=>r.error)?.error:undefined);
       if(contextRef.current.key===captured.key&&contextRef.current.epoch===captured.epoch){
-        setDetailedResults(results);setSwapResults({success,failed:results.filter(r=>r.status==='failed').length,skipped:skippedCount,pending:pendingCount,problem,totalValue:received,totalOutput:formatUnits(totalRaw,preview.outputDecimals),outputToken:preview.outputToken,valuationAvailable:preview.outputPrice>0});setShowResultsModal(true);setIsProcessing(false);setProgressStep('');setQuotePreviewData(null);
+        setDetailedResults(results);setSwapResults({success,failed:results.filter(r=>r.status==='failed').length,skipped:skippedCount,pending:pendingCount,problem,walletRequest:pendingRecord?{label:pendingRecord.label,hash:pendingRecord.hash}:undefined,totalValue:received,totalOutput:formatUnits(totalRaw,preview.outputDecimals),outputToken:preview.outputToken,valuationAvailable:preview.outputPrice>0});setShowResultsModal(true);setIsProcessing(false);setProgressStep('');setQuotePreviewData(null);
       }
       sendLock.current=false;
       if(contextRef.current.key===captured.key&&contextRef.current.epoch===captured.epoch&&success>0&&!localStorage.getItem(pendingKey(account,network)))void scanWalletTokens(true);
@@ -1790,11 +1843,9 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
     return tokens.filter((t: TokenInfo) => t.address.toLowerCase() !== outputTokenAddr.toLowerCase());
   }, [tokens, outputToken, config]);
 
-  const { knownPriceTokens, unknownPriceTokens } = useMemo(() => {
-    const known = displayTokens.filter(t => t.priceSource !== 'unknown');
-    const unknown = displayTokens.filter(t => t.priceSource === 'unknown');
-    return { knownPriceTokens: known, unknownPriceTokens: unknown };
-  }, [displayTokens]);
+  const knownPriceTokens = useMemo(() => displayTokens.filter(inventoryHasDisplayPrice), [displayTokens]);
+  const inventory = useMemo(() => sweepInventory(displayTokens,{chainId,query:inventoryQuery,limit:visibleCount}), [displayTokens,chainId,inventoryQuery,visibleCount]);
+  const selectedUnpriced = displayTokens.some(token=>selectedTokens.has(token.address)&&!inventoryHasDisplayPrice(token));
 
   const totalSelectedValue = useMemo(() => {
     const outputTokenAddr = outputAddress(outputToken);
@@ -2059,6 +2110,10 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
               </div>
               
               {swapResults?.problem && <div role="alert" className="mt-4 p-3 rounded-lg border border-yellow-500/30 bg-yellow-500/10 text-sm text-yellow-200">{swapResults.problem}</div>}
+              {swapResults?.walletRequest && <div className="mt-3 p-3 rounded-lg border border-amber-500/30 text-sm text-amber-200" aria-label="Wallet request to verify">
+                <p>{swapResults.walletRequest.label} needs checking. No further transaction will be requested until it is resolved.</p>
+                {swapResults.walletRequest.hash && <a className="block mt-2 break-all text-blue-400" href={`${config.explorerUrl}/tx/${swapResults.walletRequest.hash}`} target="_blank" rel="noopener noreferrer">View request: {swapResults.walletRequest.hash}</a>}
+              </div>}
               <div className="grid grid-cols-3 gap-4 mt-4">
                 <div className="bg-slate-900/50 rounded-lg p-3">
                   <p className="text-xs text-slate-400">Total Input Value</p>
@@ -2229,7 +2284,7 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
           <p className="text-sm text-slate-300 mt-2">{pending.label}: confirm its status before sending another transaction. A slow receipt check does not mean the transaction failed.</p>
           {pending.hash && <a className="text-sm text-blue-400 break-all" href={`${config.explorerUrl}/tx/${pending.hash}`} target="_blank" rel="noopener noreferrer">View transaction ↗</a>}
           <input aria-label="Transaction hash from wallet" placeholder={pending.hash?'Replacement hash, if sped up or cancelled':'Paste transaction hash from your wallet'} className="w-full min-w-0 mt-3 p-3 rounded-lg bg-slate-800 text-white" value={recoveryHash} onChange={e=>setRecoveryHash(e.target.value)}/>
-          <button disabled={isProcessing} className="mt-3 block py-2 px-4 rounded-lg bg-blue-600 text-white disabled:opacity-50" onClick={reconcilePending}>Check transaction</button>
+          <button disabled={isProcessing||isReconciling} className="mt-3 block py-2 px-4 rounded-lg bg-blue-600 text-white disabled:opacity-50" onClick={reconcilePending}>{isReconciling?'Checking transaction…':'Check transaction'}</button>
         </section>}
         {discoveryNotice && <p role="status" className="mb-4 p-4 rounded-xl bg-yellow-500/10 text-yellow-400 text-sm">{discoveryNotice}</p>}
         {/* Chain Warning */}
@@ -2490,6 +2545,11 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
                 {isScanning && tokens.length>0 && <p role="status" className="text-sm text-slate-400 mb-3">Balances ready. Updating display prices…</p>}
                 {tokens.length > 0 && (
                   <>
+                    <label className="block mb-3 text-sm text-slate-400">
+                      Search all holdings
+                      <input type="search" aria-label="Search all holdings" maxLength={128} value={inventoryQuery} onChange={event=>{setInventoryQuery(event.target.value);setVisibleCount(50);}} placeholder="Token, name or address" className="mt-1 w-full min-w-0 px-3 py-2 bg-slate-900/50 border border-slate-700 rounded-lg text-white" />
+                    </label>
+                    <p className="mb-3 text-xs text-slate-400" role="status">Showing {inventory.rows.length} of {inventory.matchingCount} holdings{inventoryQuery?' matching your search':''} · {inventory.unpricedCount} unpriced. Unpriced balances remain available for review.</p>
                     {/* Select All / None - FIXED: removed extra closing div */}
                     <div className="flex gap-2 mb-3">
                       <button
@@ -2503,7 +2563,7 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
                         onClick={() => setSelectedTokens(new Set(knownPriceTokens.filter(t=>t.unitsVerified).map((t: TokenInfo) => t.address)))}
                         className="text-xs text-blue-400 hover:text-blue-300"
                       >
-                        Known Only
+                        Priced Only
                       </button>
                       <span className="text-slate-600">|</span>
                       <button
@@ -2514,10 +2574,11 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
                       </button>
                     </div>
 
-                    {/* Token Grid - Known Price Tokens */}
+                    {/* Positive holdings remain visible independently of valuation. */}
                     <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
-                      {knownPriceTokens.slice(0,visibleCount).map((token: TokenInfo) => {
+                      {inventory.rows.map((token: TokenInfo) => {
                         const isSelected = selectedTokens.has(token.address);
+                        const priced = inventoryHasDisplayPrice(token);
                         const customAmount = customAmounts[token.address] || '';
                         
                         return (
@@ -2525,7 +2586,7 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
                             key={token.address}
                             className={`p-3 rounded-xl border transition ${
                               isSelected 
-                                ? 'bg-slate-800 border-emerald-500/50' 
+                                ? priced?'bg-slate-800 border-emerald-500/50':'bg-slate-800 border-amber-500/50'
                                 : 'bg-slate-800/30 border-transparent opacity-60'
                             }`}
                           >
@@ -2543,9 +2604,9 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
                                   }
                                   setSelectedTokens(next);
                                 }}
-                                className={`w-5 h-5 rounded flex items-center justify-center border transition ${
+                                className={`w-5 h-5 shrink-0 rounded flex items-center justify-center border transition ${
                                   isSelected 
-                                    ? 'bg-emerald-500 border-emerald-500' 
+                                    ? priced?'bg-emerald-500 border-emerald-500':'bg-amber-500 border-amber-500'
                                     : 'border-slate-600 hover:border-slate-500'
                                 }`}
                               >
@@ -2553,25 +2614,20 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
                               </button>
 
                               <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-medium text-white">{token.symbol}</span>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="font-medium text-white break-all">{token.symbol}</span>
                                   {getTokenLabel(chainId, token.address) && (
                                     <span className="text-xs text-slate-400">{getTokenLabel(chainId, token.address)}</span>
                                   )}
                                   <span className="text-xs text-slate-500">{shortenAddress(token.address)}</span>
                                 </div>
-                                <div className="text-sm text-slate-400">
-                                  Balance: {token.balanceFormatted}
+                                <div className="text-sm text-slate-400 break-all">
+                                  Balance: {token.unitsVerified?formatUnits(token.balance,token.decimals):`${token.balance} raw units · units unavailable`}
                                 </div>
                               </div>
 
-                              <div className="text-right">
-                                <div className="text-emerald-400 font-medium">
-                                  {formatUSD(token.valueUsd)}
-                                </div>
-                                <div className="text-xs text-slate-500">
-                                  @ ${formatNumber(token.price, 4)}
-                                </div>
+                              <div className="shrink-0 text-right">
+                                {priced?<><div className="text-emerald-400 font-medium">{formatUSD(token.valueUsd)}</div><div className="text-xs text-slate-500">@ ${formatNumber(token.price,4)}</div></>:<span className="text-amber-400 text-sm font-medium" title="USD estimate unavailable. You can still review an exact amount.">Unpriced</span>}
                               </div>
                               
                               <button
@@ -2586,7 +2642,7 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
                                   });
                                   console.log(`🚫 Hid ${token.symbol}`);
                                 }}
-                                className="ml-2 p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition"
+                                className="shrink-0 ml-2 p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition"
                                 title="Hide this token"
                               >
                                 <XCircle className="w-4 h-4" />
@@ -2597,7 +2653,9 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
                               <div className="mt-3 flex items-center gap-2 bg-black/20 rounded-lg px-3 py-2 border border-slate-700">
                                 <input
                                   type="text"
-                                  placeholder={token.balanceFormatted}
+                                  aria-label={`Amount of ${token.symbol}`}
+                                  disabled={!token.unitsVerified||isProcessing}
+                                  placeholder={token.unitsVerified?formatUnits(token.balance,token.decimals):'Units unavailable'}
                                   value={customAmount}
                                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                                     setCustomAmounts((prev: Record<string, string>) => ({
@@ -2605,7 +2663,7 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
                                       [token.address]: e.target.value
                                     }));
                                   }}
-                                  className="flex-1 bg-transparent text-sm text-white outline-none placeholder:text-slate-600"
+                                  className="flex-1 min-w-0 bg-transparent text-sm text-white outline-none placeholder:text-slate-600"
                                 />
                                 <button
                                   onClick={() => {
@@ -2626,101 +2684,8 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
                       })}
                     </div>
 
-                    {Math.max(knownPriceTokens.length,unknownPriceTokens.length)>visibleCount && <button type="button" onClick={()=>setVisibleCount(n=>n+50)} className="mt-3 px-4 py-2 text-sm text-blue-400">Show 50 more tokens</button>}
-                    {/* Unknown Price Tokens Section */}
-                    {unknownPriceTokens.length > 0 && (
-                      <div className="mt-4 border-t border-slate-700/50 pt-4">
-                        <button
-                          onClick={() => setShowUnknownPriceTokens(!showUnknownPriceTokens)}
-                          className="flex items-center gap-2 text-sm text-yellow-400 hover:text-yellow-300 mb-2"
-                        >
-                          {showUnknownPriceTokens ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                          <HelpCircle className="w-4 h-4" />
-                          {unknownPriceTokens.length} tokens with unknown price
-                        </button>
-                        
-                        {showUnknownPriceTokens && (
-                          <div className="space-y-2">
-                            {unknownPriceTokens.slice(0,visibleCount).map((token: TokenInfo) => {
-                              const isSelected = selectedTokens.has(token.address);
-                              
-                              return (
-                                <div
-                                  key={token.address}
-                                  className={`p-3 rounded-xl border transition ${
-                                    isSelected 
-                                      ? 'bg-yellow-900/20 border-yellow-500/50' 
-                                      : 'bg-slate-800/30 border-transparent opacity-60'
-                                  }`}
-                                >
-                                  <div className="flex items-center gap-3">
-                                    <button
-                                      disabled={!token.unitsVerified || isProcessing}
-                                      aria-label={`Select ${token.symbol}`}
-                                      onClick={() => {
-                                        if(!token.unitsVerified)return;
-                                        const next = new Set(selectedTokens);
-                                        if (next.has(token.address)) {
-                                          next.delete(token.address);
-                                        } else {
-                                          next.add(token.address);
-                                        }
-                                        setSelectedTokens(next);
-                                      }}
-                                      className={`w-5 h-5 rounded flex items-center justify-center border transition ${
-                                        isSelected 
-                                          ? 'bg-yellow-500 border-yellow-500' 
-                                          : 'border-slate-600 hover:border-slate-500'
-                                      }`}
-                                    >
-                                      {isSelected && <CheckCircle className="w-3.5 h-3.5 text-white" />}
-                                    </button>
-                                    
-                                    <div className="flex-1 min-w-0">
-                                      <div className="flex items-center gap-2">
-                                        <span className="font-medium text-white">{token.symbol}</span>
-                                        {getTokenLabel(chainId, token.address) && (
-                                          <span className="text-xs text-slate-400">{getTokenLabel(chainId, token.address)}</span>
-                                        )}
-                                        <span className="text-xs text-slate-500">{shortenAddress(token.address)}</span>
-                                        <span className="text-xs text-yellow-500 bg-yellow-500/10 px-1.5 py-0.5 rounded">No price</span>
-                                      </div>
-                                      <div className="text-sm text-slate-400">
-                                        Balance: {token.balanceFormatted}
-                                      </div>
-                                    </div>
-                                    
-                                    <div className="text-right">
-                                      <div className="text-yellow-400 font-medium flex items-center gap-1">
-                                        <HelpCircle className="w-3 h-3" />
-                                        ???
-                                      </div>
-                                    </div>
-                                    
-                                    <button
-                                      onClick={(e: React.MouseEvent) => {
-                                        e.stopPropagation();
-                                        hideToken(chainId, token.address);
-                                        setTokens((prev: TokenInfo[]) => prev.filter((t: TokenInfo) => t.address !== token.address));
-                                        setSelectedTokens((prev: Set<string>) => {
-                                          const next = new Set(prev);
-                                          next.delete(token.address);
-                                          return next;
-                                        });
-                                      }}
-                                      className="ml-2 p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition"
-                                      title="Hide this token"
-                                    >
-                                      <XCircle className="w-4 h-4" />
-                                    </button>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    )}
+                    {inventory.matchingCount>visibleCount && <button type="button" onClick={()=>setVisibleCount(n=>n+50)} className="mt-3 px-4 py-2 text-sm text-blue-400">Show 50 more tokens</button>}
+                    {inventory.matchingCount===0&&<p className="py-6 text-center text-slate-400">No holdings match this search.</p>}
                   </>
                 )}
               </div>
@@ -2728,11 +2693,11 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
               {/* Action Footer */}
               {tokens.length > 0 && (
                 <div className="p-4 border-t border-slate-700/50 bg-slate-900/30">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <span className="text-sm text-slate-400">Total Value:</span>
-                      <span className="ml-2 text-xl font-bold text-white">
-                        {formatUSD(totalSelectedValue)}
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+                    <div className="flex flex-wrap items-baseline gap-2">
+                      <span className="text-sm text-slate-400">Selected USD estimate:</span>
+                      <span className={`text-xl font-bold ${selectedUnpriced?'text-amber-300':'text-white'}`}>
+                        {selectedUnpriced?'Unavailable':formatUSD(totalSelectedValue)}
                       </span>
                     </div>
                     <div className="text-sm text-slate-400">

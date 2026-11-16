@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {handleQuoteRequest,discoverTokens,READ_API_CHAINS} from './sweeper-read-api.ts';
+import {parseQuoteRequest,handleQuoteRequest,discoverTokens,READ_API_CHAINS} from './sweeper-read-api.ts';
 const addr=n=>'0x'+BigInt(n).toString(16).padStart(40,'0'),wallet=addr(100),sell=addr(101),buy=addr(102),key='sentinel-private-test-key',AH='0x0000000000001ff3684f28c67538d4d072c22734',treasury='0xe6e7d3c6379ad80de02f26ccc72605d0f70d5201';
 const response=(d,status=200)=>new Response(JSON.stringify(d),{status,headers:{'content-type':'application/json'}});
 const quoteParams=(chainId='8453')=>new URLSearchParams({chainId,sellToken:sell,buyToken:buy,sellAmount:'123456',taker:READ_API_CHAINS[chainId].swapper,slippageBps:'50',txOrigin:wallet});
@@ -10,8 +10,9 @@ test('all nine chains retain exact RewardSwapper binding and existing5bps treasu
  assert.equal(READ_API_CHAINS['59144'].swapper,'0x679e6e600e480d99f8aed8555953ad2cf43bab96');
 });
 test('unknown/duplicate parameters, bad chain/address/uint/taker/slippage and recipient/value/fee overrides reject before fetch',async()=>{
- let calls=0;const fetchImpl=async()=>{calls++;throw Error('must not fetch');};
- for(const mutate of [p=>p.set('recipient',wallet),p=>p.set('value','1'),p=>p.set('swapFeeBps','0'),p=>p.append('sellAmount','999'),p=>p.set('chainId','8453junk'),p=>p.set('wallet',wallet),p=>p.set('taker',wallet),p=>p.set('sellAmount','0'),p=>p.set('sellAmount',(2n**256n).toString()),p=>p.set('sellAmount','001'),p=>p.set('sellToken',addr(0)),p=>p.set('slippageBps','501')]){const p=quoteParams();mutate(p);assert.equal((await handleQuoteRequest(p,{ZERO_EX_API_KEY:key},{fetchImpl})).status,400);}
+ let calls=0,keyReads=0;const fetchImpl=async()=>{calls++;throw Error('must not fetch');},guardedEnv={get ZERO_EX_API_KEY(){keyReads++;return key;}};
+ for(const mutate of [p=>p.set('recipient',wallet),p=>p.set('value','1'),p=>p.set('swapFeeBps','0'),p=>p.append('sellAmount','999'),p=>p.set('chainId','8453junk'),p=>p.set('wallet',wallet),p=>p.set('taker',wallet),p=>p.set('sellAmount','0'),p=>p.set('sellAmount',(2n**256n).toString()),p=>p.set('sellAmount','001'),p=>p.set('sellToken',addr(0)),p=>p.set('slippageBps','501')]){const p=quoteParams();mutate(p);assert.throws(()=>parseQuoteRequest(p),/^Error: Invalid quote request\.$/);assert.equal((await handleQuoteRequest(p,guardedEnv,{fetchImpl})).status,400);}
+ assert.equal(keyReads,0);
  assert.equal(calls,0);assert.equal((await handleQuoteRequest(quoteParams(),{ZERO_EX_API_KEY:key,SWAP_FEE_BPS:'6'},{fetchImpl})).status,503);assert.equal(calls,0);
 });
 test('quote identity/router/value corruption fails closed and safe errors never reflect provider URL/key',async()=>{
