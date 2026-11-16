@@ -1,0 +1,53 @@
+Read-only sweeper API contract
+
+Existing endpoints remain GET /api/0x/quote and /api/tokens/discover.
+Routes read only explicit existing server environment references. No env files,
+wallet/signing methods, production keys or live quote requests are used by tests.
+
+Quote inputs: chainId,sellToken,buyToken,sellAmount,taker, optionalslippageBps(default30)
+andtxOrigin. Unknown/duplicate fields, recipient/value/fee overrides, zero/native-token
+placeholders, invalid uint256 amounts and slippage outside10..500 are rejected.
+All nine original chains remain; Base25f11..., Linea679e..., otherchains75f57... .
+Server binds taker AND recipient to that chain's existing RewardSwapper and sends
+the existing5bps fee to Treasury e6e7...5201 in buyToken. Existing SWAP_FEE_BPS /
+SWAP_FEE_RECIPIENT references remain; conflicting settings fail configuration review.
+Only the fixed HTTPS 0x AllowanceHolder quote endpoint is contacted, no redirects.
+
+Quote success returns validated token/rawamount/taker/recipient fields, buyAmount,
+REQUIRED minBuyAmount, transaction{to,data,value0,optionalgas/gasPrice}, quotedAt,
+liquidityAvailabletrue, optionalestimatedPriceImpact. Arbitrary upstream fields and
+errors are not reflected. transaction.to is the existing canonical AllowanceHolder.
+minBuyAmount must be a positiveuint256 <=buyAmount and no weaker than
+floor(buyAmount*(10000-requestedSlippageBps)/10000). Missing or weaker bounds reject.
+The UI must retain the original reviewed minimum, require fresh quotes to preserve
+it, and reconcile actual net receipts; the FOT Swapper's scaled wrapper floor alone
+does not establish an absolute reviewed minimum.
+
+Safe quote error codes: INVALID_QUOTE_REQUEST, QUOTE_AUTHENTICATION,
+QUOTE_CONFIGURATION, RATE_LIMITED, QUOTE_ACCESS_DENIED, QUOTE_SERVICE_UNAVAILABLE,
+NO_ROUTE_FOR_AMOUNT, TOKEN_NOT_SUPPORTED, QUOTE_REQUEST_REJECTED,
+INVALID_EXECUTABLE_QUOTE, QUOTE_TIMEOUT. No raw errors, URLs or keys are returned.
+Every quote has an8000ms total budget and bounded JSON body; no result caching.
+
+Discovery inputs: supportedchainId and wallet only. Results preserve tokens/count/
+logs and add partial, complete, providers[{provider,status,reason,count,pages}],
+budgetMs and limitations. Five independent provider jobs start concurrently. Alchemy
+uses serverALCHEMY_API_KEY /ALCHEMY_KEY first, with legacyNEXT_PUBLIC fallback,
+and sequential pagination<=10pages. Other original provider sources remain1inch,
+Ankr, block explorer and optionalMoralis. All jobs share one7800ms deadline.
+Timeout/failure/incomplete pages preserve successful token candidates and setpartial.
+Ankr/Moralis next-page markers and explorer1000-row cap report PAGE_LIMIT.
+Combined candidates are case-normalized, unique, address-validated and bounded10000.
+Discovery balances only select candidates; frontend must re-read current balances/
+metadata/routes. Complete means configured bounded jobs finished, not proof that
+every wallet token was indexed or is sellable. Manual address entry remains needed.
+
+Fixed-origin/safe-error/deadline/concurrency tests:
+ node --experimental-strip-types --test src/lib/sweeper-read-api.test.mjs
+Seven focused tests pass without network access or real credentials.
+
+Primary API parameter reference checked2026-11-16:
+https://docs.0x.org/api-reference/evm-ap-is/swap/allowanceholder-getquote
+It documents minBuyAmount, recipient/taker and fee/slippage fields. The generated
+reference did not explicitly establish net-after-fees wording, so no additional fee
+subtraction is inferred. Actual receipt simulation remains the decisive net check.

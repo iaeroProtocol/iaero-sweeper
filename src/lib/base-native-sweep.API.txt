@@ -1,0 +1,93 @@
+Base native sweep helper (new files only; no wallet writes)
+
+Module: base-native-sweep.ts
+Source baseline: clean main website commit a53d38e32a00fe1319cbc09f57e5dab55683ad07,
+frontend/src/live/native-sweep.ts. No staking, claims, APY or full bootstrap dependency.
+
+1. Build a reviewed BaseNativeConfig with current verified hashes:
+   {quoterRuntimeHash, registryRuntimeHash,
+    factoryRuntimePins:{lowercaseFactoryAddress:runtimeHash,...},
+    outputRuntimePins:{lowercaseUSDC/WETH/newAEROAddress:runtimeHash,...},
+    paymentsLibrary:{address:'0xa37042e33c31e41b74bf18f0c1b27000f10e9e13',runtimeHash},
+    linkedRuntimePins?:{otherVerifiedLinkedAddress:runtimeHash}}
+   The Base router/registry/quoter/Multicall/output addresses, router runtime and
+   Multicall runtime are literal pins. All registry factories need reviewed hashes.
+   Pool runtime hashes are captured only for pools authenticated by those factories,
+   matching factory/pair/type; those exact hashes and links are rechecked before use.
+
+2. Create one session per read-only review, never at module scope or application startup:
+   const session=createBaseNativeSweepSession(publicClient,config);
+   const q=await session.quote({account,tokenIn,tokenOut,amountIn,decimals,slippageBps});
+   tokenOut is canonical BaseUSDC/WETH/newAERO. All amounts are bigint RAW units.
+   decimals is number0..36 or null; null stays unknown and is never replaced with18.
+   Equal tokenIn/tokenOut returns null and requires no swap or approval.
+   Quotes share a pinned current header and per-session factory/pair cache. Discovery
+   verifies runtime/registry/pool links; direct plus bounded two-hop paths are quoted.
+   Inputs with missing checks, router custody, transfer restrictions or no acceptable
+   liquidity remain unswapped. Do not describe every discovered/spam token as sellable.
+
+3. q exposes amountIn, grossAmountOut, protocolFee, netAmountOut, minimumNet,
+   qualityMinimum, marginalAmountOut, route, quotedAt, proof. Quotes expire120s from
+   their original block time. Original account/token/cap/units/slippage are hash-bound.
+   Slippage is10..500bps. NET minimum is the stronger of the reviewed slippage floor
+   and ceil(95%of raw marginal). Thus the existing5bps protocol fee is included in
+   the5%total pool-fee/impact quality limit. Quotes exceeding that limit are held.
+
+4. Separate native and0x batches. Up to10 native inputs with one output/account:
+   const batch=buildBaseNativeBatch(quotes,{account,deadline:unixSecondsBigInt});
+   Deadline must be within the next300seconds. Result is a viem-compatible request
+   {address,abi,functionName:'execute',args,value:0n,account} plus quotes/touchedTokens.
+   It has NO transfer of nativeETH. Homogeneous CL/V2 paths use a whole-path command;
+   mixed paths use exact first input, router-funded actual intermediate balance and
+   only a final gross floor. No intermediate estimated amount becomes a swap minimum.
+
+5. Preview required approvals and trade together without storage/balance overrides:
+   await simulateBaseNativeBatch(publicClient,batch,{account,withApprovals:true});
+   This simulates exact approvals only when needed, then the complete native batch.
+   UI actual approval spender must be BASE_NATIVE.router, never the0x RewardSwapper.
+   UI owns the approval policy and confirmations; this module sends nothing.
+   After approvals, obtain fresh quotes when expired and always run again immediately
+   before wallet submission with withApprovals:false. It requires real sufficient
+   allowance and rechecks Base/account/caps/runtime/pool links, zero router balances,
+   actual wallet/treasury simulation deltas and exact fee/net receipt evidence.
+   recheckBaseNativeBatch(client,batch,account) is also exported for a final current
+   zero-custody check after gas estimation. Wallet identity and pending/replaced
+   transaction recovery remain responsibilities of the guarded UI sender.
+   Client-side checks attest the inspected block; they do not freeze future state.
+
+6. After a successful exact transaction/target/hash receipt is verified by the sender:
+   const result=baseNativeReceipt(receipt.logs,batch);
+   It binds ordered last-pool gross output, fee destination/proportion, net wallet
+   output and exact input net debit. Returns per-leg grossOutput/protocolFee/netOutput.
+   Distinguishes fee transfers even if the connected wallet is the fee recipient.
+   Failed or ambiguous receipts must never trigger automatic replay of successes.
+
+Existing5bps atomic fee (no new contract or unverified opcode):
+   swap output -> router; TRANSFER0x05(tokenOut,treasury,{mode:Pips=1,value:500});
+   SWEEP0x04(tokenOut,wallet,minimumNet). Pips denominator1,000,000.
+   Applied per leg; fee=floor(actualGross*500/1,000,000). Net is gross-fee.
+   All touched router token balances must be0 before simulation and fresh submission;
+   the full simulation also requires them0 afterwards. Pre-existing custody is held.
+   Existing0x API5bps fee policy is untouched by this module.
+
+Primary local source anchors under:
+ Aero metadex-public/ contracts checkout (reviewed deployment source):
+ deployment-addresses/metarouter-base.json (PaymentsLib and router addresses),
+ V3/src/metarouter/libraries/Commands.sol (0x00/0x08 exact-in,0x05 TRANSFER,0x04 SWEEP),
+ V3/src/metarouter/libraries/PaymentsLib.sol:28-56 (ABI/layout, recipients and sweep floor),
+ V3/src/metarouter/libraries/FundsLib.sol:108-135 (Pips uses floor Math.mulDiv),
+ V3/src/metarouter/Metarouter.sol:206-221,495-545,605-659 (execute/whole-path swaps).
+ Deployment map SHA256 e902a14ec3bd47e1be6403d247223afe23698d171872f723a99f88fdc33279f5
+ Commands SHA256 cb52fdd1828aa2eda634e7a4d47809ec779753bd9ab7d22114c64f7482510608
+ PaymentsLib SHA256 af5b8422a7e0615806a73e3fa8cf014db7095e787672322149e6598a27f2ebc9
+ FundsLib SHA256 a0110f738c49164feb20b1a21742557a466f3eeaf94c1cecfb23074508a63652
+
+Focused offline tests (Node26, installed existing viem; no new framework):
+ node --experimental-strip-types --test src/lib/base-native-sweep.test.mjs src/lib/base-native-discovery.test.mjs
+Nine tests cover pure encoding/rounding/receipts and successful discovery/full
+sequential simulation using the real public runtime fixture. Pool/getter/AMM/balance
+responses are synthetic; this proves helper control flow, not actual token liquidity.
+base-native-runtime.fixture.json is test-only, read through NodeFS; never import it
+from browser code. It binds lead capture SHA256
+8f2ea07d3ba6a11ecee07eec76104129a9c145d3aebd25145790f1a2efe6887a.
+Live/native integration and independently checked runtime pins are lead validation.

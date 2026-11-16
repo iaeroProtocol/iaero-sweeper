@@ -21,7 +21,7 @@ import {
 import { clusterApiUrl } from '@solana/web3.js';
 
 // Import wallet adapter styles
-import '@solana/wallet-adapter-react-ui/styles.css';
+// Wallet adapter styles are self-hosted to avoid a remote font import.
 
 interface SolanaProviderProps {
   children: React.ReactNode;
@@ -49,11 +49,14 @@ export function SolanaProvider({ children, rpcEndpoint }: SolanaProviderProps) {
   );
 
   return (
+    <>
+    <link rel="stylesheet" href="/brand/solana-wallet.css"/>
     <ConnectionProvider endpoint={endpoint}>
       <WalletProvider wallets={wallets} autoConnect>
         <WalletModalProvider>{children}</WalletModalProvider>
       </WalletProvider>
     </ConnectionProvider>
+    </>
   );
 }
 

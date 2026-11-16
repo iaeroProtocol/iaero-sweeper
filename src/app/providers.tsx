@@ -3,12 +3,13 @@
 import { WagmiProvider, createConfig, http } from 'wagmi';
 import { mainnet, base, arbitrum, optimism, polygon, bsc, avalanche, scroll, linea } from 'wagmi/chains';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { RainbowKitProvider, getDefaultConfig, darkTheme } from '@rainbow-me/rainbowkit';
+import { RainbowKitProvider, getDefaultConfig, darkTheme, lightTheme } from '@rainbow-me/rainbowkit';
+import { BrandThemeProvider, useBrandTheme } from '@/components/brand';
 
 const alchemyKey = process.env.NEXT_PUBLIC_ALCHEMY_KEY;
 
 const config = getDefaultConfig({
-  appName: 'Token Sweeper',
+  appName: 'iAERO Token Sweeper',
   projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'demo',
   chains: [base, mainnet, arbitrum, optimism, polygon, bsc, avalanche, scroll, linea],
   transports: {
@@ -44,21 +45,21 @@ const queryClient = new QueryClient();
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <WagmiProvider config={config}>
-      <QueryClientProvider client={queryClient}>
-        <RainbowKitProvider
-          theme={darkTheme({
-            accentColor: '#10b981',
-            accentColorForeground: 'white',
-            borderRadius: 'large',
-            fontStack: 'system',
-            overlayBlur: 'small',
-          })}
-          modalSize="compact"
-        >
-          {children}
-        </RainbowKitProvider>
-      </QueryClientProvider>
-    </WagmiProvider>
+    <BrandThemeProvider>
+      <WagmiProvider config={config}>
+        <QueryClientProvider client={queryClient}>
+          <BrandedWalletTheme>{children}</BrandedWalletTheme>
+        </QueryClientProvider>
+      </WagmiProvider>
+    </BrandThemeProvider>
   );
+}
+
+function BrandedWalletTheme({children}: {children: React.ReactNode}) {
+  const {theme} = useBrandTheme();
+  const walletTheme = (theme === 'dark' ? darkTheme : lightTheme)({
+    accentColor: '#2464df', accentColorForeground: 'white', borderRadius: 'large', fontStack: 'system', overlayBlur: 'none',
+  });
+  walletTheme.fonts.body = 'Manrope, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  return <RainbowKitProvider theme={walletTheme} modalSize="compact">{children}</RainbowKitProvider>;
 }

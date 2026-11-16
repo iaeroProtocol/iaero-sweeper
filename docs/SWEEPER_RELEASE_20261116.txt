@@ -1,0 +1,42 @@
+iAERO Token Sweeper upgrade — release notes and operation
+
+Parent repository commit: bf7255e91148037e9ca8738f324e00e50bbdda46.
+Brand and native-route reference: main iAERO website source a53d38e32a00fe1319cbc09f57e5dab55683ad07.
+
+Behavior
+- Existing nine EVM networks and Solana remain available.
+- On Base, USDC, WETH and canonical new AERO are output choices.
+- Generic native Aerodrome V2/CL discovery supplements 0x. B20 stock addresses try native pools first. Other ERC20s use the same factory, code, units, liquidity and receipt checks; there is no ticker allowlist.
+- Unsupported/paused/restricted/no-liquidity tokens remain unswapped. Discovery is a bounded union, not a promise that every asset was indexed or is sellable. Manual address entry remains available. Tokens whose units cannot be read cannot be selected.
+- Existing 5 bps Treasury fee is preserved. Native swaps apply the fee atomically before the net minimum sweep. No new contracts or token permissions are deployed.
+- Confirmed exact input caps, exact approvals, immutable account/chain/nonce intent and output minimums survive the approval flow. Changed minimums require another review.
+- A pending receipt, ambiguous provider response or replacement never automatically replays a sale. Pending records survive refresh. The original sender/nonce and a canonical receipt prove a repricing or cancellation before the gate clears.
+- Confirmed proceeds are retained in partial-batch summaries. Unavailable USD marks display raw token output.
+
+Performance
+- Native routing is dynamically imported after selection, not at startup.
+- Removed the artificial 2.5 second quote delay and inter-batch sleeps.
+- Display prices are bulk requests rather than per-token executable 0x quotes.
+- Discovery providers run concurrently with finite deadlines. Metadata is bounded to 3 parallel 50-token pages, and visible rows render in increments of 50.
+- Manrope is local, 24,576 bytes. Light/dark layouts match the current main website. Mobile header overflow is fixed and browser zoom remains available.
+
+Environment and deployment
+Use the existing Cloudflare Pages project iaero-sweeper and sweeper.iaero.finance domain. No hosting migration is required.
+Server-only: ALCHEMY_API_KEY for token discovery (ALCHEMY_KEY and the legacy NEXT_PUBLIC_ALCHEMY_KEY remain compatibility fallbacks); ZERO_EX_API_KEY for 0x quotes. Existing 5 bps Treasury configuration is enforced.
+Preserve existing public WalletConnect project ID and wallet transports. Do not put a new server secret in NEXT_PUBLIC_ variables. Native Base operation also passed through the existing public Base RPC.
+The current public discovery endpoint returned zero candidates in the read-only treasury check; the candidate with its server discovery key found 583. The existing public and local 0x endpoints both returned 200 with the same output. Preserve the working 0x configuration. The encrypted-secret listing does not enumerate plaintext/build variables and cannot prove they are absent. Configure the server-only discovery key before publishing if it is not already available to the new handler.
+
+Checks
+npm ci --ignore-scripts --no-audit --no-fund
+npm test
+npm run typecheck
+npm run build
+npm run check:release
+npm start -- --hostname 127.0.0.1 --port 4420
+Use the package manager's normal production build/deployment on the current host. NEXT_BUILD_DIR is optional and is used only to keep local production verification separate from the development server.
+
+Rollback
+Restore the parent application release. The change makes no onchain configuration or contract changes. Preserve pending transaction records and reconcile any outstanding hashes before another wallet send.
+
+Validation boundaries
+Independent source reviews cover native helper, read APIs and integrated execution. Browser wallet tests are isolated synthetic EIP1193/RPC fixtures; they never sign or send real transactions. Lead read-only Base simulations cover real stock-token execution without state overrides. These checks are not an external contract audit, a live mainnet transaction or a guarantee of future liquidity.

@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test --test-concurrency=2 src/lib/*.test.mjs",
+    "check:release": "node scripts/check-release.mjs"
   },
   "dependencies": {
     "@rainbow-me/rainbowkit": "^2.2.10",
@@ -17,7 +20,7 @@
     "@tanstack/react-query": "^5.28.4",
     "framer-motion": "^11.0.8",
     "lucide-react": "^0.363.0",
-    "next": "^15.5.8",
+    "next": "15.5.29",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "viem": "^2.9.0",
