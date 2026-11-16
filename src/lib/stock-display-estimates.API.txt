@@ -1,0 +1,40 @@
+Stock display estimates — presentation only, publication remains HOLD
+
+runStockDisplayEstimates({chainId,account,inputs,usdcPrice?,quote,
+ shouldContinue?,onEstimate?,now?}) returns frozen token-keyed display records.
+Only the existing fourteen exact Base stock addresses with positive verified
+units/balances are eligible; maximum fourteen assets and two concurrent reads.
+The callback uses one shared existing verified native session for USDC quotes.
+Native account, input/output, exact raw balance, decimals, positive net output
+and original quote age (120 seconds, at most 5 seconds future) are checked.
+Cancellation stops queued work and suppresses late publications; failures are
+isolated. Records contain only identity, units, exact raw balances/USDC and time.
+
+stockDisplayValue(record,{chainId,account,token,decimals,unitsVerified,balance,
+ amount?,now?}) validates that original identity/balance/age again. A custom
+amount can prorate the estimate within the quoted balance for display only;
+it never substitutes for the later exact-amount executable quote. USD conversion
+requires genuine still-current independent canonical USDC evidence. Without it,
+the UI explicitly shows raw-USDC estimates; no dollar peg is invented.
+
+The page publishes balances before launching background work. It runs only when
+the current wallet scan is complete, visible, and idle (no quote review, results,
+processing or pending request). Stable input fingerprints exclude estimates, so
+publishing prices never starts a duplicate job. Cancelled jobs finish before a
+new display job starts; new work and late writes are scope/scan/balance-bound.
+After finishing, a sixty-second foreground timer checks whether estimates have
+expired; valid estimates are reused and no quote is requested for feed-priced
+stocks. Activity and visibility changes cancel the timer and queued work.
+
+Separate displayEstimate / estimatedInputValueUsd / estimatedInputUsdc fields
+serve inventory, custom-amount summaries, Review and Results. Values are amber
+and prefixed Est. Market-price fields, observations, automatic/"Priced Only"
+selection, quality assessments, explicit unknown-value consent, accepted loss
+ceilings, raw trade floors, caps, signer and pending controls are unchanged.
+Review can reuse its already-verified native quote to show a display estimate
+without issuing another price or quote request. Estimated values never produce
+a green independent-loss result or independentPrice observation.
+
+No new public API, credential, provider binding, contract or deployment. The
+existing shared provider budgets govern any missing USDC feed read. The native
+quote adapter and all execution/price guards retain their reviewed source.

@@ -7,9 +7,10 @@ import { AERO, SLIPPAGE_BPS, QUOTE_TTL_MS, exactAmount, minimumOutput, preserveM
 import type { BaseNativeQuote, BaseNativeConfig, BaseNativeClient } from '@/lib/base-native-sweep';
 import { independentPrice, currentIndependentPrice, assessQuoteValue, acceptValueRisk, quoteValueExecutable, assertRefreshedQuoteValue, type IndependentPrice, type QuoteValueQuality, type ValueRiskConsent } from '@/lib/sweep-value-quality';
 import { discoveryFailureMessage, discoveredTokenAddresses } from '@/lib/sweep-discovery-ui';
-import { inventoryHasDisplayPrice, sweepInventory } from '@/lib/sweep-inventory';
+import { inventoryHasDisplayPrice, isDisplayStock, sweepInventory } from '@/lib/sweep-inventory';
 import { bindSubmittedWalletRequest } from '@/lib/sweep-transaction-proof';
 import { createExecutionPriceReader } from '@/lib/sweep-execution-prices';
+import { runStockDisplayEstimates, stockDisplayValue, type StockDisplayEstimate } from '@/lib/stock-display-estimates';
 import { 
   useAccount, 
   usePublicClient, 
@@ -231,6 +232,7 @@ interface TokenInfo {
   logoUrl?: string;
   priceSource?: 'zerox' | 'defillama' | 'coingecko' | 'stablecoin' | 'unknown';
   priceObservation?: IndependentPrice;
+  displayEstimate?: StockDisplayEstimate;
 }
 
 type MarketPrice = { price: number; source: string; observation?: IndependentPrice };
@@ -276,6 +278,8 @@ interface SwapResultDetail {
   inputValueUsd: number;
   quotedOutputUsd: number;
   actualOutputUsd?: number;
+  estimatedInputValueUsd?: number;
+  estimatedInputUsdc?: string;
   executionSlippage: number;
   totalCostPercent: number;
   independentValuationAvailable: boolean;
@@ -720,6 +724,8 @@ interface QuotePreviewItem {
   selected: boolean;
   quality: QuoteValueQuality;
   riskConsent?: ValueRiskConsent;
+  estimatedInputValueUsd?: number;
+  estimatedInputUsdc?: string;
 }
 
 interface FailedQuoteItem {
@@ -824,6 +830,8 @@ export default function TokenSweeperPage() {
   }, [chainId]);
   
   const [tokens, setTokens] = useState<TokenInfo[]>([]);
+  const [stockPriceCycle, setStockPriceCycle] = useState(0);
+  const stockPriceJob = useRef<Promise<void> | null>(null);
   const [selectedTokens, setSelectedTokens] = useState<Set<string>>(new Set());
   const [customAmounts, setCustomAmounts] = useState<Record<string, string>>({});
   
@@ -1399,6 +1407,53 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
     const [engine, pins] = await Promise.all([import('@/lib/base-native-sweep'), import('@/lib/base-native-pins.json')]);
     return {engine, session:engine.createBaseNativeSweepSession(publicClient as unknown as BaseNativeClient, pins.default as BaseNativeConfig)};
   };
+  const stockValueFor=(token:TokenInfo,amount=token.balance)=>address?stockDisplayValue(token.displayEstimate,{chainId,account:address,token:token.address,decimals:token.decimals,unitsVerified:token.unitsVerified,balance:token.balance,amount}):undefined;
+
+  // Estimates are presentation data only: price/valueUsd/priceObservation and
+  // every selection, consent and execution guard remain independent of them.
+  const stockPriceKey = JSON.stringify(tokens.filter(t=>isDisplayStock(chainId,t.address)&&!inventoryHasDisplayPrice(t)).map(t=>[t.address,t.balance.toString(),t.decimals,t.unitsVerified]));
+  useEffect(()=>{
+    const update=()=>setStockPriceCycle(n=>n+1);
+    document.addEventListener('visibilitychange',update);
+    window.addEventListener('focus',update);
+    return()=>{document.removeEventListener('visibilitychange',update);window.removeEventListener('focus',update);};
+  },[]);
+  useEffect(()=>{
+    if(chainId!==8453||!address||!publicClient||isScanning||isProcessing||showQuotePreview||pending||showResultsModal||document.visibilityState!=='visible'||lastScannedKey!==`${address}-${chainId}`)return;
+    const candidates=tokens.filter(t=>isDisplayStock(chainId,t.address)&&!inventoryHasDisplayPrice(t)&&t.unitsVerified&&t.balance>0n);
+    if(!candidates.length)return;
+    const captured=scope(),scanId=scanEpoch.current,account=address;
+    let active=true,timer:ReturnType<typeof setTimeout>|undefined;
+    const current=()=>active&&captured.key===contextRef.current.key&&captured.epoch===contextRef.current.epoch&&scanId===scanEpoch.current&&document.visibilityState==='visible';
+    const previousJob=stockPriceJob.current;
+    const job=(async()=>{
+      // A cancelled read can finish in the background, but a new display job
+      // never overlaps it or delays an action from the wallet controls.
+      await previousJob?.catch(()=>{});
+      if(!current())return;
+      const missing=candidates.filter(t=>!stockDisplayValue(t.displayEstimate,{chainId,account,token:t.address,decimals:t.decimals,unitsVerified:t.unitsVerified,balance:t.balance}));
+      if(!missing.length)return;
+      const usdc='0x833589fcd6edb6e08f4c7c32d4f71b54bda02913' as Address;
+      const known=currentIndependentPrice(tokens.find(t=>sameAddress(t.address,usdc))?.priceObservation,chainId,usdc);
+      const [native,prices]=await Promise.all([loadNative(),known?Promise.resolve(undefined):fetchMarketPrices([{address:usdc,decimals:6,balance:0n,symbol:'USDC'}],chainId,usdc)]);
+      if(!current())return;
+      await runStockDisplayEstimates({chainId,account,inputs:missing.map(t=>({token:t.address,decimals:t.decimals,unitsVerified:t.unitsVerified,balance:t.balance})),usdcPrice:known??prices?.[usdc]?.observation,
+        quote:input=>native.session.quote({...input,slippageBps:SLIPPAGE_BPS}),shouldContinue:current,
+        onEstimate:estimate=>{
+          if(!current())return;
+          setTokens(previous=>current()?previous.map(t=>t.address.toLowerCase()===estimate.token&&t.balance===estimate.balance&&t.decimals===estimate.decimals&&t.unitsVerified?{...t,displayEstimate:estimate}:t):previous);
+        },
+      });
+    })();
+    stockPriceJob.current=job;
+    void job.catch(()=>{}).finally(()=>{
+      if(stockPriceJob.current===job)stockPriceJob.current=null;
+      if(current())timer=setTimeout(()=>{if(current())setStockPriceCycle(n=>n+1);},60_000);
+    });
+    return()=>{active=false;if(timer)clearTimeout(timer);};
+  // The key excludes estimates, so publishing a result never restarts its job.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[stockPriceKey,stockPriceCycle,chainId,address,publicClient,isScanning,isProcessing,showQuotePreview,pending,showResultsModal,lastScannedKey]);
 
   async function quoteToken(token: TokenWithAmount, output: OutputToken, outPrice: number, native: () => ReturnType<typeof loadNative>, route: 'auto'|'native'|'0x' = 'auto'): Promise<SwapQuote> {
     const out = outputAddress(output);
@@ -1489,7 +1544,14 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
           checkScope(captured);
           const quality=quoteValueQuality(token,quote,outputToken,outputDecimals,outputPriceObservation);
           const inputValueUsd=quality.inputUsd??0,quotedOutputUsd=quality.outputUsd??0;
-          return {ok:true as const,value:{token,inputValueUsd,quotedOutputUsd,lossPercent:quality.independentLossPercent??quote.priceImpact,lossUsd:Math.max(0,inputValueUsd-quotedOutputUsd),quote,quality,selected:quality.defaultSelected}};
+          let estimate=stockValueFor(token,token.amountToSwap);
+          if(quality.inputUsd===null&&quote.native&&outputToken==='USDC'){
+            // Reuse this already-verified exact-amount quote for presentation;
+            // this callback issues no additional quote or provider request.
+            const display=await runStockDisplayEstimates({chainId,account:address,inputs:[{token:token.address,decimals:token.decimals,unitsVerified:token.unitsVerified,balance:token.amountToSwap}],usdcPrice:outputPriceObservation,quote:async()=>quote.native});
+            estimate=stockDisplayValue(display[token.address.toLowerCase()],{chainId,account:address,token:token.address,decimals:token.decimals,unitsVerified:token.unitsVerified,balance:token.amountToSwap});
+          }
+          return {ok:true as const,value:{token,inputValueUsd,quotedOutputUsd,lossPercent:quality.independentLossPercent??quote.priceImpact,lossUsd:Math.max(0,inputValueUsd-quotedOutputUsd),quote,quality,selected:quality.defaultSelected,estimatedInputValueUsd:estimate?.valueUsd??undefined,estimatedInputUsdc:estimate?formatUnits(estimate.usdcUnits,6):undefined}};
         } catch(e:any) { return {ok:false as const,value:{token,error:e?.message||'No executable route found.'}}; }
         finally { if(captured.key===contextRef.current.key&&captured.epoch===contextRef.current.epoch) setProgressStep(`Quoting ${++complete} of ${tokensToSwap.length} tokens…`); }
       });
@@ -1669,7 +1731,7 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
       checkScope(captured);
       return receipt;
     };
-    const result=(q:QuotePreviewItem,status:'success'|'failed'|'skipped'|'pending',message?:string,actual?:bigint):SwapResultDetail=>({symbol:q.token.symbol,tokenIn:q.token.address,amountIn:q.token.amountToSwap,decimalsIn:q.token.decimals,inputValueUsd:q.inputValueUsd,quotedOutputUsd:q.quotedOutputUsd,actualOutputUsd:actual===undefined?undefined:Number(formatUnits(actual,preview.outputDecimals))*preview.outputPrice,executionSlippage:0,totalCostPercent:q.lossPercent,independentValuationAvailable:q.quality.independentLossPercent!==null,status,error:message});
+    const result=(q:QuotePreviewItem,status:'success'|'failed'|'skipped'|'pending',message?:string,actual?:bigint):SwapResultDetail=>({symbol:q.token.symbol,tokenIn:q.token.address,amountIn:q.token.amountToSwap,decimalsIn:q.token.decimals,inputValueUsd:q.inputValueUsd,quotedOutputUsd:q.quotedOutputUsd,estimatedInputValueUsd:q.estimatedInputValueUsd,estimatedInputUsdc:q.estimatedInputUsdc,actualOutputUsd:actual===undefined?undefined:Number(formatUnits(actual,preview.outputDecimals))*preview.outputPrice,executionSlippage:0,totalCostPercent:q.lossPercent,independentValuationAvailable:q.quality.independentLossPercent!==null,status,error:message});
     try {
       await assertWallet();
       const output=outputAddress(preview.outputToken);
@@ -1867,23 +1929,22 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
 
   const knownPriceTokens = useMemo(() => displayTokens.filter(inventoryHasDisplayPrice), [displayTokens]);
   const inventory = useMemo(() => sweepInventory(displayTokens,{chainId,query:inventoryQuery,limit:visibleCount}), [displayTokens,chainId,inventoryQuery,visibleCount]);
-  const selectedUnpriced = displayTokens.some(token=>selectedTokens.has(token.address)&&!inventoryHasDisplayPrice(token));
-
-  const totalSelectedValue = useMemo(() => {
-    const outputTokenAddr = outputAddress(outputToken);
-    return tokens
-      .filter((t: TokenInfo) => selectedTokens.has(t.address) && t.address.toLowerCase() !== outputTokenAddr.toLowerCase())
-      .reduce((sum: number, t: TokenInfo) => {
-        const customInput = customAmounts[t.address];
-        if (customInput) {
-          try {
-            const amount = parseFloat(customInput);
-            return sum + (amount * t.price);
-          } catch {}
+  const selectedDisplay = useMemo(() => {
+    let value=0,estimated=false;
+    for(const token of displayTokens.filter(t=>selectedTokens.has(t.address))){
+      try{
+        const amount=exactAmount(customAmounts[token.address],token.balance,token.decimals,token.unitsVerified);
+        if(inventoryHasDisplayPrice(token))value+=Number(formatUnits(amount,token.decimals))*token.price;
+        else{
+          const display=stockValueFor(token,amount);
+          if(display?.valueUsd===undefined||display.valueUsd===null)return {value:null,estimated:true};
+          value+=display.valueUsd;estimated=true;
         }
-        return sum + t.valueUsd;
-      }, 0);
-  }, [tokens, selectedTokens, customAmounts, outputToken, config]);
+      }catch{return {value:null,estimated:true};}
+    }
+    return {value:Number.isFinite(value)?value:null,estimated};
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[displayTokens,selectedTokens,customAmounts,chainId,address,stockPriceCycle]);
 
   const selectedCount = useMemo(() => {
     const outputTokenAddr = outputAddress(outputToken);
@@ -1931,9 +1992,9 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
               
               <div className="grid grid-cols-3 gap-4 mt-4">
                 <div className="bg-slate-900/50 rounded-lg p-3">
-                  <p className="text-xs text-slate-400">Independent Input Value</p>
-                  <p className="text-lg font-bold text-white">
-                    {quotePreviewData.quotes.some(q=>q.selected&&q.quality.inputUsd===null)?'Unavailable':formatUSD(quotePreviewData.quotes.filter(q=>q.selected).reduce((sum,q)=>sum+q.inputValueUsd,0))}
+                  <p className="text-xs text-slate-400">Input value</p>
+                  <p className={`text-lg font-bold ${quotePreviewData.quotes.some(q=>q.selected&&q.quality.inputUsd===null)?'text-amber-300':'text-white'}`}>
+                    {(()=>{const rows=quotePreviewData.quotes.filter(q=>q.selected),values=rows.map(q=>q.quality.inputUsd??q.estimatedInputValueUsd);return values.some(v=>v===undefined)?'Unavailable':`${rows.some(q=>q.quality.inputUsd===null)?'Est. ':''}${formatUSD(values.reduce<number>((sum,v)=>sum+(v??0),0))}`;})()}
                   </p>
                 </div>
                 <div className="bg-slate-900/50 rounded-lg p-3">
@@ -1999,7 +2060,8 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
                         </div>
                       </td>
                       <td className="py-3 text-right">
-                        <span className="text-slate-300">{quoteData.inputValueUsd>0?formatUSD(quoteData.inputValueUsd):"—"}</span>
+                        <span className={quoteData.quality.inputUsd===null?'text-amber-300':'text-slate-300'}>{quoteData.inputValueUsd>0?formatUSD(quoteData.inputValueUsd):quoteData.estimatedInputValueUsd!==undefined?`Est. ${formatUSD(quoteData.estimatedInputValueUsd)}`:quoteData.estimatedInputUsdc?`Est. ${formatNumber(Number(quoteData.estimatedInputUsdc),4)} USDC`:'—'}</span>
+                        {quoteData.quality.inputUsd===null&&(quoteData.estimatedInputValueUsd!==undefined||quoteData.estimatedInputUsdc)&&<p className="text-[10px] text-amber-400/80">Pool estimate</p>}
                       </td>
                       <td className="py-3 text-right">
                         <span className={`${quoteData.quality.defaultSelected?'text-emerald-400':'text-slate-200'} font-medium`}>{formatNumber(Number(quoteData.quote.buyAmountFormatted),6)} {quotePreviewData.outputToken}</span><p className="text-xs text-slate-400">Minimum share {formatUnits(quoteData.quote.minimum,quotePreviewData.outputDecimals)}</p>
@@ -2139,10 +2201,8 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
               <div className="grid grid-cols-3 gap-4 mt-4">
                 <div className="bg-slate-900/50 rounded-lg p-3">
                   <p className="text-xs text-slate-400">Total Input Value</p>
-                  <p className="text-lg font-bold text-white">
-                    {formatUSD(detailedResults
-                      .filter((r: SwapResultDetail) => r.status === 'success')
-                      .reduce((sum: number, r: SwapResultDetail) => sum + r.inputValueUsd, 0))}
+                  <p className={`text-lg font-bold ${detailedResults.some(r=>r.status==='success'&&!r.independentValuationAvailable)?'text-amber-300':'text-white'}`}>
+                    {(()=>{const rows=detailedResults.filter(r=>r.status==='success'),values=rows.map(r=>r.independentValuationAvailable?r.inputValueUsd:r.estimatedInputValueUsd);return values.some(v=>v===undefined)?'Unavailable':`${rows.some(r=>!r.independentValuationAvailable)?'Est. ':''}${formatUSD(values.reduce<number>((sum,v)=>sum+(v??0),0))}`;})()}
                   </p>
                 </div>
                 <div className="bg-slate-900/50 rounded-lg p-3">
@@ -2230,7 +2290,7 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
                           )}
                         </td>
                         <td className="py-3 text-right">
-                          <span className="text-slate-400">{result.independentValuationAvailable?formatUSD(result.inputValueUsd):'Unavailable'}</span>
+                          <span className={result.independentValuationAvailable?'text-slate-400':'text-amber-300'}>{result.independentValuationAvailable?formatUSD(result.inputValueUsd):result.estimatedInputValueUsd!==undefined?`Est. ${formatUSD(result.estimatedInputValueUsd)}`:result.estimatedInputUsdc?`Est. ${formatNumber(Number(result.estimatedInputUsdc),4)} USDC`:'Unavailable'}</span>
                         </td>
                         <td className="py-3 text-right">
                           {result.status === 'success' && result.independentValuationAvailable ? (
@@ -2601,6 +2661,7 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
                       {inventory.rows.map((token: TokenInfo) => {
                         const isSelected = selectedTokens.has(token.address);
                         const priced = inventoryHasDisplayPrice(token);
+                        const estimate = priced?undefined:stockValueFor(token);
                         const customAmount = customAmounts[token.address] || '';
                         
                         return (
@@ -2648,8 +2709,8 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
                                 </div>
                               </div>
 
-                              <div className="shrink-0 text-right">
-                                {priced?<><div className="text-emerald-400 font-medium">{formatUSD(token.valueUsd)}</div><div className="text-xs text-slate-500">@ ${formatNumber(token.price,4)}</div></>:<span className="text-amber-400 text-sm font-medium" title="USD estimate unavailable. You can still review an exact amount.">Unpriced</span>}
+                              <div className="shrink-0 max-w-[8rem] break-words text-right">
+                                {priced?<><div className="text-emerald-400 font-medium">{formatUSD(token.valueUsd)}</div><div className="text-xs text-slate-500">@ ${formatNumber(token.price,4)}</div></>:estimate?<div className="text-amber-300" aria-label={`${token.symbol} pool estimate`} title="Indicative sale value from a native USDC quote. Trading still requires a fresh review."><div className="font-medium">Est. {estimate.valueUsd!==null?formatUSD(estimate.valueUsd):`${formatNumber(Number(formatUnits(estimate.usdcUnits,6)),4)} USDC`}</div><div className="text-[10px] text-amber-400/80">{estimate.priceUsd!==null?`≈ $${formatNumber(estimate.priceUsd,2)} each`:'Pool quote in USDC'}</div></div>:<span className="text-amber-400 text-sm font-medium" title="USD estimate unavailable. You can still review an exact amount.">Unpriced</span>}
                               </div>
                               
                               <button
@@ -2718,8 +2779,8 @@ const spamPatterns = externalPatterns.length > 0 ? externalPatterns : getSpamPat
                   <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
                     <div className="flex flex-wrap items-baseline gap-2">
                       <span className="text-sm text-slate-400">Selected USD estimate:</span>
-                      <span className={`text-xl font-bold ${selectedUnpriced?'text-amber-300':'text-white'}`}>
-                        {selectedUnpriced?'Unavailable':formatUSD(totalSelectedValue)}
+                      <span className={`text-xl font-bold ${selectedDisplay.estimated?'text-amber-300':'text-white'}`}>
+                        {selectedDisplay.value===null?'Unavailable':`${selectedDisplay.estimated?'Est. ':''}${formatUSD(selectedDisplay.value)}`}
                       </span>
                     </div>
                     <div className="text-sm text-slate-400">
