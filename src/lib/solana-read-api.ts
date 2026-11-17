@@ -1,5 +1,6 @@
 import {PublicKey} from '@solana/web3.js';
 import {associatedToken, base64Bytes, object, rawU64, solanaAddress, solanaSignature, validateSolanaQuote, validateJupiterRoute, validateSolanaAccountProofs, assertSolanaReview,
+  solanaFinalizedProof,solanaSignatureProof,assertSolanaStatusAgreement,
   SOLANA_USDC, SOLANA_WSOL, SOLANA_MAINNET, SPL_TOKEN, JUPITER_PROGRAM, SOLANA_FEE_WALLET, type SolanaQuote} from './solana-intent';
 
 type ApiResult = {status: number; data: Record<string, any>; headers?: Record<string, string>};
@@ -141,8 +142,16 @@ export async function handleSolanaRequest(operation: SolanaOperation, parsed: un
     }
     const [genesis,status,transaction,height,valid]=await rpc([{method:'getGenesisHash',params:[]},{method:'getSignatureStatuses',params:[[p.signature],{searchTransactionHistory:true}]},{method:'getTransaction',params:[p.signature,{encoding:'base64',commitment:'finalized',maxSupportedTransactionVersion:0}]},{method:'getBlockHeight',params:[{commitment:'finalized'}]},{method:'isBlockhashValid',params:[p.blockhash,{commitment:'finalized'}]}]);
     if(genesis!==SOLANA_MAINNET||!Array.isArray(status?.value)||status.value.length!==1||!safeInteger(height,1,Number.MAX_SAFE_INTEGER)||typeof valid?.value!=='boolean')throw new ReadFailure(503,'SOLANA_RESPONSE_INVALID');
-    if(transaction!==null){if(!object(transaction)||!Array.isArray(transaction.transaction)||transaction.transaction[1]!=='base64'||!safeInteger(transaction.slot,1,Number.MAX_SAFE_INTEGER)||!object(transaction.meta))throw new ReadFailure(503,'SOLANA_RESPONSE_INVALID');base64Bytes(transaction.transaction[0],1232);}
-    return {status:200,data:{network:SOLANA_MAINNET,status:status.value[0],transaction:transaction===null?null:{slot:transaction.slot,wire:transaction.transaction[0],err:transaction.meta.err===null?null:'EXECUTION_FAILED',preTokenBalances:transaction.meta.preTokenBalances,postTokenBalances:transaction.meta.postTokenBalances},finalizedHeight:height,blockhashValid:valid.value}};
+    let signatureStatus,finalized;
+    try{
+      signatureStatus=solanaSignatureProof(status.value[0]);
+      if(transaction!==null){
+        if(!object(transaction)||!Array.isArray(transaction.transaction)||transaction.transaction[1]!=='base64'||!safeInteger(transaction.slot,1,Number.MAX_SAFE_INTEGER)||!object(transaction.meta))throw new Error('Invalid transaction');
+        base64Bytes(transaction.transaction[0],1232);finalized=solanaFinalizedProof(transaction.meta,transaction.slot);
+        assertSolanaStatusAgreement(finalized,signatureStatus);
+      }
+    }catch{throw new ReadFailure(503,'SOLANA_RESPONSE_INVALID');}
+    return {status:200,data:{network:SOLANA_MAINNET,signature:p.signature,status:signatureStatus,transaction:transaction===null?null:{...finalized,wire:transaction.transaction[0],preTokenBalances:transaction.meta.preTokenBalances,postTokenBalances:transaction.meta.postTokenBalances},finalizedHeight:height,blockhashValid:valid.value}};
   };
   try {
     const deadline=new Promise<never>((_,reject)=>{abort=()=>{controller.abort();reject(new ReadFailure(503,'SOLANA_READ_TIMEOUT'));};timer=setTimeout(abort,8_000);options.signal?.addEventListener('abort',abort,{once:true});if(options.signal?.aborted)abort();});

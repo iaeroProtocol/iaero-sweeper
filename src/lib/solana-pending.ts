@@ -1,5 +1,5 @@
 import {VersionedTransaction, VersionedMessage} from '@solana/web3.js';
-import {SOLANA_MAINNET, associatedToken, base64Bytes, object, rawU64, sameBytes, solanaAddress, toBase64, type SolanaReviewedIntent} from './solana-intent';
+import {SOLANA_MAINNET, associatedToken, base64Bytes, object, rawU64, sameBytes, solanaAddress, toBase64, validateSolanaFinalizedProof,validateSolanaSignatureProof, type SolanaReviewedIntent} from './solana-intent';
 import {createOwnedJournal, type JournalStorage, type WalletWorkflowLease} from './wallet-workflow';
 
 export type SolanaPending = {
@@ -39,8 +39,10 @@ export function beginSolanaPending(storage:JournalStorage,lease:WalletWorkflowLe
 }
 export type SolanaReconciliation = {state:'pending'|'expired-unresolved'|'confirmed'|'failed';outputAmount?:string;signature?:string;slot?:number};
 export function validateSolanaReconciliation(p:SolanaPending,value:unknown):SolanaReconciliation {
-  if(!object(value)||value.network!==SOLANA_MAINNET||!Number.isSafeInteger(value.finalizedHeight)||typeof value.blockhashValid!=='boolean')throw new Error('Original transaction status is unavailable. Do not retry.');
+  if(!object(value)||value.network!==SOLANA_MAINNET||!Number.isSafeInteger(value.finalizedHeight)||value.finalizedHeight<1||typeof value.blockhashValid!=='boolean')throw new Error('Original transaction status is unavailable. Do not retry.');
   if(!p.signedWire||!p.signature)return {state:'pending'};
+  if(value.signature!==p.signature||!Object.prototype.hasOwnProperty.call(value,'status'))throw new Error('Original signature status identity is missing. Keep the request pending.');
+  validateSolanaSignatureProof(value.status);
   if(value.transaction===null){
     // Even an expired blockhash does not prove an unsigned/unknown wallet response was never submitted.
     // Do not auto-clear an absent transaction or start a new attempt. This is an explicit manual hold.
@@ -48,7 +50,8 @@ export function validateSolanaReconciliation(p:SolanaPending,value:unknown):Sola
   }
   const t=value.transaction;if(!object(t)||!Number.isSafeInteger(t.slot)||t.slot<1||t.wire!==p.signedWire)throw new Error('Canonical transaction differs from the saved signed bytes. Keep the request pending.');
   const tx=VersionedTransaction.deserialize(base64Bytes(t.wire));if(signatureBase58(tx.signatures[0])!==p.signature||toBase64(tx.message.serialize())!==p.unsignedMessage)throw new Error('Canonical transaction identity differs.');
-  if(t.err!==null)return {state:'failed',signature:p.signature,slot:t.slot};
+  const proof=validateSolanaFinalizedProof(t,value.status);
+  if(proof.outcome==='failure')return {state:'failed',signature:p.signature,slot:t.slot};
   const keys=tx.message.staticAccountKeys.map(k=>k.toBase58()),source=associatedToken(p.account,p.intent.inputMint),dest=associatedToken(p.account,p.intent.outputMint);
   if(!Array.isArray(t.preTokenBalances)||!Array.isArray(t.postTokenBalances)||t.preTokenBalances.length>64||t.postTokenBalances.length>64)throw new Error('Finalized token changes are unavailable. Keep the request pending.');
   const amounts=(rows:any[])=>{

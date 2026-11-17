@@ -26,7 +26,7 @@ function plan(q=quote()){const ix=instruction(q);return {network:I.SOLANA_MAINNE
 function memory(){const m=new Map();return {getItem:k=>m.get(k)??null,setItem:(k,v)=>m.set(k,v),removeItem:k=>m.delete(k),m};}
 let count=0;function lease(){let active=true;return {name:'test',journalId:`00000000-0000-4000-8000-${String(++count).padStart(12,'0')}`,assertActive(){if(!active)throw Error('released');},release(){active=false;}};}
 function balance(index,mint,amount){return {accountIndex:index,mint,owner:account,uiTokenAmount:{amount:String(amount)}};}
-function canonical(record,tx){const source=I.associatedToken(account,mint),dest=I.associatedToken(account,I.SOLANA_USDC),keys=tx.message.staticAccountKeys.map(k=>k.toBase58());return {network:I.SOLANA_MAINNET,finalizedHeight:499,blockhashValid:true,status:{confirmationStatus:'finalized'},transaction:{wire:record.signedWire,slot:1234,err:null,preTokenBalances:[balance(keys.indexOf(source),mint,1000),balance(keys.indexOf(dest),I.SOLANA_USDC,200)],postTokenBalances:[balance(keys.indexOf(source),mint,0),balance(keys.indexOf(dest),I.SOLANA_USDC,10150)]}};}
+function canonical(record,tx){const source=I.associatedToken(account,mint),dest=I.associatedToken(account,I.SOLANA_USDC),keys=tx.message.staticAccountKeys.map(k=>k.toBase58());return {network:I.SOLANA_MAINNET,signature:record.signature,finalizedHeight:499,blockhashValid:true,status:{slot:1234,confirmations:null,confirmationStatus:'finalized',outcome:'success',err:null},transaction:{wire:record.signedWire,slot:1234,confirmationStatus:'finalized',outcome:'success',err:null,preTokenBalances:[balance(keys.indexOf(source),mint,1000),balance(keys.indexOf(dest),I.SOLANA_USDC,200)],postTokenBalances:[balance(keys.indexOf(source),mint,0),balance(keys.indexOf(dest),I.SOLANA_USDC,10150)]}};}
 
 test('exact reviewed floor, account, units, age and worsening impact survive fresh quotes',()=>{
  const i=review();I.assertSolanaReview(i,account,quote({outAmount:'11000',otherAmountThreshold:'10890'}),now);
@@ -44,7 +44,7 @@ test('persist before signing, persist original signed bytes before send, reload 
  const storage=memory(),i=review(),tx=I.compileSolanaPlan(plan(),i,now),j=P.beginSolanaPending(storage,lease(),i,tx,500);
  assert.equal(P.readSolanaPending(storage,account).record.phase,'signing');tx.sign([owner]);const record=j.signed(tx);assert.equal(P.readSolanaPending(storage,account).record.signedWire,Buffer.from(tx.serialize()).toString('base64'));
  assert.throws(()=>j.submitted('different'));j.unknown();const restored=P.readSolanaPending(storage,account);assert.equal(restored.record.blockhash,hash);assert.equal(restored.record.lastValidBlockHeight,500);assert.equal(restored.record.signature,record.signature);
- assert.equal(P.validateSolanaReconciliation(restored.record,{network:I.SOLANA_MAINNET,transaction:null,finalizedHeight:600,blockhashValid:false}).state,'expired-unresolved');assert.ok(storage.getItem(P.solanaPendingKey(account)));
+ assert.equal(P.validateSolanaReconciliation(restored.record,{network:I.SOLANA_MAINNET,signature:restored.record.signature,status:null,transaction:null,finalizedHeight:600,blockhashValid:false}).state,'expired-unresolved');assert.ok(storage.getItem(P.solanaPendingKey(account)));
 });
 test('wallet mutation or journal replacement cannot be signed/sent/cleared through original owner',()=>{
  const storage=memory(),i=review(),tx=I.compileSolanaPlan(plan(),i,now),j=P.beginSolanaPending(storage,lease(),i,tx,500),other=I.compileSolanaPlan({...plan(),blockhash:mint},i,now);other.sign([owner]);assert.throws(()=>j.signed(other));
@@ -165,4 +165,120 @@ test('ambiguous signer text and foreign or uncleared storage keep the pending ga
   },100,undefined,undefined,{reviews:[review()],storage,acquire:async()=>lease(),read:async op=>op==='quote'?{quote:quote()}:plan()});
   assert.equal(result.failed[0].status,'pending');assert(P.readSolanaPending(storage,account));if(foreign)assert.equal(storage.getItem(P.solanaPendingKey(account)),foreign);
  }
+});
+
+// SWP-50-M01 / R4-M03: finality and errors are proof fields, never truthiness.
+const failedInstruction = {InstructionError:[0,{Custom:6001}]};
+function signedJournal(){const storage=memory(),tx=I.compileSolanaPlan(plan(),review(),now),journal=P.beginSolanaPending(storage,lease(),review(),tx,500);tx.sign([owner]);return {storage,tx,journal,record:journal.signed(tx)};}
+function rpcReconciliation(record,tx,mutate=()=>{}){
+ const observed=canonical(record,tx);
+ const raw={status:{value:[{slot:1234,confirmations:null,confirmationStatus:'finalized',err:null,status:{Ok:null}}]},transaction:{slot:1234,transaction:[record.signedWire,'base64'],meta:{err:null,status:{Ok:null},preTokenBalances:observed.transaction.preTokenBalances,postTokenBalances:observed.transaction.postTokenBalances}}};
+ mutate(raw);return raw;
+}
+async function actualReconcile(record,tx,mutate){
+ let calls=0;const raw=rpcReconciliation(record,tx,mutate);
+ const result=await A.handleSolanaRequest('reconcile',{account,signature:record.signature,blockhash:hash,lastValidBlockHeight:500},env,{fetchImpl:async(_url,init)=>{
+  calls++;const body=JSON.parse(init.body);assert.deepEqual(body.map(x=>x.method),['getGenesisHash','getSignatureStatuses','getTransaction','getBlockHeight','isBlockhashValid']);
+  const values=[I.SOLANA_MAINNET,raw.status,raw.transaction,600,{value:false}];return Response.json(body.map((request,i)=>({jsonrpc:'2.0',id:request.id,result:values[i]})));
+ }});assert.equal(calls,1);return result;
+}
+function setFailure(raw,error=failedInstruction){raw.transaction.meta.err=structuredClone(error);raw.transaction.meta.status={Err:structuredClone(error)};raw.status.value[0].err=structuredClone(error);raw.status.value[0].status={Err:structuredClone(error)};raw.transaction.meta.preTokenBalances=[];raw.transaction.meta.postTokenBalances=[];}
+const malformedRpcCases=[
+ ['missing meta.err',r=>{delete r.transaction.meta.err;}],
+ ['undefined meta.err',r=>{r.transaction.meta.err=undefined;}],
+ ['false meta.err',r=>{r.transaction.meta.err=false;}],
+ ['numeric meta.err',r=>{r.transaction.meta.err=0;}],
+ ['empty meta.err object',r=>{r.transaction.meta.err={};}],
+ ['unsupported error string',r=>{r.transaction.meta.err='EXECUTION_FAILED';}],
+ ['malformed instruction error',r=>{r.transaction.meta.err={InstructionError:[0]};}],
+ ['success status conflicts with failure',r=>{r.transaction.meta.err=failedInstruction;r.transaction.meta.status={Err:failedInstruction};}],
+ ['failure status conflicts with success',r=>{r.status.value[0].err=failedInstruction;r.status.value[0].status={Err:failedInstruction};}],
+ ['different explicit failure errors',r=>{setFailure(r);r.status.value[0].err={InstructionError:[0,{Custom:6002}]};r.status.value[0].status={Err:r.status.value[0].err};}],
+ ['missing status err',r=>{delete r.status.value[0].err;}],
+ ['undefined status entry',r=>{r.status.value=[];}],
+ ['missing signature status array',r=>{delete r.status.value;}],
+ ['status slot differs',r=>{r.status.value[0].slot=1235;}],
+ ['nonfinalized status',r=>{r.status.value[0].confirmationStatus='confirmed';r.status.value[0].confirmations=1;}],
+ ['explicit null confirmation status',r=>{r.status.value[0].confirmationStatus=null;}],
+ ['legacy status contradicts err',r=>{r.transaction.meta.status={Err:failedInstruction};}],
+ ['malformed legacy Err(null)',r=>{r.transaction.meta.status={Err:null};}],
+];
+test('SDK JSON error formats support explicit known failures and reject unsupported values',()=>{
+ const known=['AccountInUse','BlockhashNotFound','CommitCancelled',{InstructionError:[0,'InvalidArgument']},{InstructionError:[255,{Custom:0xffffffff}]},{InstructionError:[1,{BorshIoError:'legacy decode error'}]},{InstructionError:[1,'BorshIoError']},{DuplicateInstruction:255},{InsufficientFundsForRent:{account_index:0}},{ProgramExecutionTemporarilyRestricted:{account_index:255}}];
+ for(const error of known){const proof=I.solanaExecutionOutcome(error);assert.equal(proof.outcome,'failure');assert.deepEqual(proof.err,error);}
+ assert.deepEqual(I.solanaExecutionOutcome(null),{outcome:'success',err:null});
+ for(const error of [undefined,false,true,0,1,'','EXECUTION_FAILED','UnknownFutureVariant',{},[],{Custom:1},{InstructionError:[256,'InvalidArgument']},{InstructionError:[0,{Custom:-1}]},{InstructionError:[0,{Custom:0x100000000}]},{DuplicateInstruction:-1},{InsufficientFundsForRent:{account_index:1,extra:2}},{InstructionError:[0,{BorshIoError:'x'.repeat(513)}]}])assert.throws(()=>I.solanaExecutionOutcome(error));
+});
+test('API rejects missing, unsupported or contradictory finalized metadata with safe503',async()=>{
+ const {record,tx}=signedJournal();for(const [label,mutate] of malformedRpcCases){const result=await actualReconcile(record,tx,mutate);assert.equal(result.status,503,label);assert.equal(result.data.code,'SOLANA_RESPONSE_INVALID',label);assert.equal(result.data.transaction,undefined,label);}
+});
+test('API positive controls distinguish finalized success, explicit failure, null cache miss and legacy rooted status',async()=>{
+ for(const mode of ['success','failure','null-status-success','null-status-failure','legacy-rooted']){const {record,tx}=signedJournal();const result=await actualReconcile(record,tx,r=>{
+  if(mode.includes('failure'))setFailure(r);if(mode.startsWith('null-status'))r.status.value[0]=null;if(mode==='legacy-rooted')delete r.status.value[0].confirmationStatus;
+ });assert.equal(result.status,200,mode);assert.equal(result.data.signature,record.signature);assert.equal(result.data.transaction.outcome,mode.includes('failure')?'failure':'success');assert.equal(result.data.transaction.confirmationStatus,'finalized');
+ const client=P.validateSolanaReconciliation(record,result.data);assert.equal(client.state,mode.includes('failure')?'failed':'confirmed');if(client.state==='confirmed')assert.equal(client.outputAmount,'9950');}
+});
+const malformedClientCases=[
+ ['missing outcome',v=>{delete v.transaction.outcome;}],
+ ['missing err',v=>{delete v.transaction.err;}],
+ ['undefined err',v=>{v.transaction.err=undefined;}],
+ ['unsupported failure sentinel',v=>{v.transaction.outcome='failure';v.transaction.err='EXECUTION_FAILED';}],
+ ['failure enum with null err',v=>{v.transaction.outcome='failure';}],
+ ['success enum with explicit failure',v=>{v.transaction.err=failedInstruction;}],
+ ['missing finalized label',v=>{delete v.transaction.confirmationStatus;}],
+ ['nonfinalized transaction',v=>{v.transaction.confirmationStatus='confirmed';}],
+ ['missing status',v=>{delete v.status;}],
+ ['undefined status',v=>{v.status=undefined;}],
+ ['missing signature status outcome',v=>{delete v.status.outcome;}],
+ ['conflicting signature status',v=>{v.status.outcome='failure';v.status.err=failedInstruction;}],
+ ['status slot conflict',v=>{v.status.slot=1235;}],
+ ['missing response signature',v=>{delete v.signature;}],
+ ['other signature',v=>{v.signature='different';}],
+ ['malformed finalized height',v=>{v.finalizedHeight=-1;}],
+ ['different original wire',v=>{v.transaction.wire='AAAA';}],
+];
+test('client and recovery retain exact original journal on missing, conflicting or malformed proof fields',async()=>{
+ for(const [label,mutate] of malformedClientCases){const {storage,record,tx}=signedJournal(),value=canonical(record,tx);mutate(value);const key=P.solanaPendingKey(account),before=storage.getItem(key);
+  assert.throws(()=>P.validateSolanaReconciliation(record,value),undefined,label);
+  await assert.rejects(E.recoverSolanaPending(account,{storage,acquire:async()=>lease(),read:async()=>value}),undefined,label);
+  assert.equal(storage.getItem(key),before,label);assert.equal(P.readSolanaPending(storage,account).record.signedWire,record.signedWire,label);
+ }
+});
+test('API rejection keeps source recovery pending while genuine finalized controls clear only their owned marker',async()=>{
+ for(const mode of ['missing-meta','success','failure']){const {storage,record,tx}=signedJournal(),key=P.solanaPendingKey(account),before=storage.getItem(key);const read=async()=>{const result=await actualReconcile(record,tx,r=>{if(mode==='missing-meta')delete r.transaction.meta.err;else if(mode==='failure')setFailure(r);});if(result.status!==200)throw Error(result.data.code);return result.data;};
+  if(mode==='missing-meta'){await assert.rejects(E.recoverSolanaPending(account,{storage,acquire:async()=>lease(),read}));assert.equal(storage.getItem(key),before);}
+  else {const result=await E.recoverSolanaPending(account,{storage,acquire:async()=>lease(),read});assert.equal(result.state,mode==='success'?'confirmed':'failed');assert.equal(storage.getItem(key),null);}
+ }
+});
+test('explicit null cache status may remain pending; missing status never stands in for null',()=>{
+ const {record}=signedJournal(),absent={network:I.SOLANA_MAINNET,signature:record.signature,status:null,transaction:null,finalizedHeight:600,blockhashValid:false};assert.equal(P.validateSolanaReconciliation(record,absent).state,'expired-unresolved');
+ const missing={...absent};delete missing.status;assert.throws(()=>P.validateSolanaReconciliation(record,missing));assert.throws(()=>P.validateSolanaReconciliation(record,{...absent,status:undefined}));
+});
+test('active batch preserves unknown original transaction and stops queue on API or client status-proof corruption',async()=>{
+ for(const mode of ['api-missing-err','client-missing-outcome','client-conflicting-status','client-undefined-status']){
+  const storage=memory(),token={mint,symbol:'TEST',decimals:8,balance:1000n},later={mint:I.SOLANA_WSOL,symbol:'LATER',decimals:9,balance:10n};let signs=0,sends=0;const reads=[];
+  const laterQuote=quote({inputMint:later.mint,inAmount:'10',routePlan:[{percent:100,swapInfo:{inputMint:later.mint,outputMint:I.SOLANA_USDC,inAmount:'10',ammKey:pool}}]});
+  const conn={getGenesisHash:async()=>I.SOLANA_MAINNET,simulateTransaction:async()=>({value:{err:null}}),sendRawTransaction:async bytes=>{sends++;return P.signatureBase58(VersionedTransaction.deserialize(bytes).signatures[0]);},confirmTransaction:async()=>({value:{err:null}})};
+  const read=async op=>{reads.push(op);if(op==='quote')return {quote:quote()};if(op==='construct')return plan();
+   const record=P.readSolanaPending(storage,account).record,tx=VersionedTransaction.deserialize(Buffer.from(record.signedWire,'base64'));
+   if(mode==='api-missing-err'){const response=await actualReconcile(record,tx,r=>{delete r.transaction.meta.err;});assert.equal(response.status,503);throw Error(response.data.code);}
+   const value=canonical(record,tx);if(mode==='client-missing-outcome')delete value.transaction.outcome;else if(mode==='client-conflicting-status'){value.status.outcome='failure';value.status.err=failedInstruction;}else value.status=undefined;return value;
+  };
+  const result=await E.executeBatchSwap([token,later],I.SOLANA_USDC,6,new PublicKey(account),conn,async tx=>{signs++;tx.sign([owner]);return tx;},100,undefined,undefined,{reviews:[review(),I.createSolanaReview(account,laterQuote,9,6,false,now)],storage,acquire:async()=>lease(),read});
+  assert.equal(signs,1,mode);assert.equal(sends,1,mode);assert.deepEqual(reads,['quote','construct','reconcile'],mode);assert.equal(result.successful.length,0,mode);assert.equal(result.failed[0].status,'pending',mode);assert.equal(result.failed[1].status,'skipped',mode);assert.equal(result.totalOutputAmount,0n,mode);const saved=P.readSolanaPending(storage,account).record;assert.equal(saved.phase,'unknown',mode);assert.equal(saved.signature,result.pending.signature,mode);assert.equal(saved.signedWire,result.pending.signedWire,mode);assert.equal(saved.intent.minimumOut,'9900');
+ }
+});
+test('active genuine finalized success and explicit failure remain distinct positive controls',async()=>{
+ for(const mode of ['success','failure']){const storage=memory(),token={mint,symbol:'TEST',decimals:8,balance:1000n};let signs=0,sends=0;
+  const conn={getGenesisHash:async()=>I.SOLANA_MAINNET,simulateTransaction:async()=>({value:{err:null}}),sendRawTransaction:async bytes=>{sends++;return P.signatureBase58(VersionedTransaction.deserialize(bytes).signatures[0]);},confirmTransaction:async()=>({value:{err:null}})};
+  const read=async op=>{if(op==='quote')return {quote:quote()};if(op==='construct')return plan();const record=P.readSolanaPending(storage,account).record,tx=VersionedTransaction.deserialize(Buffer.from(record.signedWire,'base64'));const result=await actualReconcile(record,tx,r=>{if(mode==='failure')setFailure(r);});assert.equal(result.status,200);return result.data;};
+  const result=await E.executeBatchSwap([token],I.SOLANA_USDC,6,new PublicKey(account),conn,async tx=>{signs++;tx.sign([owner]);return tx;},100,undefined,undefined,{reviews:[review()],storage,acquire:async()=>lease(),read});assert.equal(signs,1);assert.equal(sends,1);assert.equal(result.pending,undefined);assert.equal(P.readSolanaPending(storage,account),null);assert.equal(result.successful.length,mode==='success'?1:0);assert.equal(result.totalOutputAmount,mode==='success'?9950n:0n);if(mode==='failure')assert.equal(result.failed[0].status,'failed');
+ }
+});
+
+test('finalized failure proof cannot clear a journal replaced while recovery awaits the provider',async()=>{
+ const {storage,record,tx}=signedJournal(),key=P.solanaPendingKey(account),foreign={...record,journalId:'00000000-0000-4000-8000-000000999999'};let replaced;
+ await assert.rejects(E.recoverSolanaPending(account,{storage,acquire:async()=>lease(),read:async()=>{
+  const response=await actualReconcile(record,tx,r=>setFailure(r));assert.equal(response.status,200);replaced=JSON.stringify(foreign);storage.setItem(key,replaced);return response.data;
+ }}));assert.equal(storage.getItem(key),replaced);assert.equal(P.readSolanaPending(storage,account).record.signedWire,record.signedWire);
 });

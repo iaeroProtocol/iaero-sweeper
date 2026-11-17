@@ -49,6 +49,108 @@ export function base64Bytes(value: unknown, max = 1232): Uint8Array {
 export const toBase64 = (bytes: Uint8Array): string => btoa(Array.from(bytes, b => String.fromCharCode(b)).join(''));
 export const sameBytes = (a: Uint8Array, b: Uint8Array): boolean => a.length === b.length && a.every((v, i) => v === b[i]);
 
+// RPC error JSON is Rust/Serde externally tagged TransactionError, not an
+// arbitrary truthy value. Primary SDK blobs: transaction-error9da5cf405bce...,
+// instruction-error816235626aba..., legacy BorshIoError572fa42c6979....
+// Unknown future variants hold the request until this schema is reviewed.
+const TRANSACTION_ERROR_UNITS = new Set([
+  'AccountInUse','AccountLoadedTwice','AccountNotFound','ProgramAccountNotFound',
+  'InsufficientFundsForFee','InvalidAccountForFee','AlreadyProcessed','BlockhashNotFound',
+  'CallChainTooDeep','MissingSignatureForFee','InvalidAccountIndex','SignatureFailure',
+  'InvalidProgramForExecution','SanitizeFailure','ClusterMaintenance','AccountBorrowOutstanding',
+  'WouldExceedMaxBlockCostLimit','UnsupportedVersion','InvalidWritableAccount',
+  'WouldExceedMaxAccountCostLimit','WouldExceedAccountDataBlockLimit','TooManyAccountLocks',
+  'AddressLookupTableNotFound','InvalidAddressLookupTableOwner','InvalidAddressLookupTableData',
+  'InvalidAddressLookupTableIndex','InvalidRentPayingAccount','WouldExceedMaxVoteCostLimit',
+  'WouldExceedAccountDataTotalLimit','MaxLoadedAccountsDataSizeExceeded',
+  'InvalidLoadedAccountsDataSizeLimit','ResanitizationNeeded','UnbalancedTransaction',
+  'ProgramCacheHitMaxLimit','CommitCancelled','BailOut',
+]);
+const INSTRUCTION_ERROR_UNITS = new Set([
+  'GenericError','InvalidArgument','InvalidInstructionData','InvalidAccountData','AccountDataTooSmall',
+  'InsufficientFunds','IncorrectProgramId','MissingRequiredSignature','AccountAlreadyInitialized',
+  'UninitializedAccount','UnbalancedInstruction','ModifiedProgramId','ExternalAccountLamportSpend',
+  'ExternalAccountDataModified','ReadonlyLamportChange','ReadonlyDataModified','DuplicateAccountIndex',
+  'ExecutableModified','RentEpochModified','NotEnoughAccountKeys','AccountDataSizeChanged',
+  'AccountNotExecutable','AccountBorrowFailed','AccountBorrowOutstanding','DuplicateAccountOutOfSync',
+  'InvalidError','ExecutableDataModified','ExecutableLamportChange','ExecutableAccountNotRentExempt',
+  'UnsupportedProgramId','CallDepth','MissingAccount','ReentrancyNotAllowed','MaxSeedLengthExceeded',
+  'InvalidSeeds','InvalidRealloc','ComputationalBudgetExceeded','PrivilegeEscalation',
+  'ProgramEnvironmentSetupFailure','ProgramFailedToComplete','ProgramFailedToCompile','Immutable',
+  'IncorrectAuthority','BorshIoError','AccountNotRentExempt','InvalidAccountOwner','ArithmeticOverflow',
+  'UnsupportedSysvar','IllegalOwner','MaxAccountsDataAllocationsExceeded','MaxAccountsExceeded',
+  'MaxInstructionTraceLengthExceeded','BuiltinProgramsMustConsumeComputeUnits','BailOut',
+]);
+export type SolanaExecutionError = string | Record<string, unknown>;
+export type SolanaOutcomeProof = {outcome:'success'|'failure';err:SolanaExecutionError|null};
+export type SolanaFinalizedProof = SolanaOutcomeProof & {slot:number;confirmationStatus:'finalized'};
+export type SolanaSignatureProof = SolanaOutcomeProof & {slot:number;confirmations:number|null;confirmationStatus:'processed'|'confirmed'|'finalized'};
+const owns = (value:Record<string,any>,key:string):boolean => Object.prototype.hasOwnProperty.call(value,key);
+const boundedUint = (value:unknown,max:number):value is number => Number.isSafeInteger(value) && Number(value)>=0 && Number(value)<=max;
+function instructionError(value:unknown):SolanaExecutionError {
+  if(typeof value==='string'&&INSTRUCTION_ERROR_UNITS.has(value))return value;
+  if(object(value)&&Object.keys(value).length===1){
+    if(owns(value,'Custom')&&boundedUint(value.Custom,0xffff_ffff))return {Custom:value.Custom};
+    // Older supported RPC histories use BorshIoError(String); current SDK uses
+    // the unit variant. Bound the legacy text rather than accepting any object.
+    if(owns(value,'BorshIoError')&&typeof value.BorshIoError==='string'&&value.BorshIoError.length<=512)return {BorshIoError:value.BorshIoError};
+  }
+  throw new Error('Unsupported Solana instruction error. Keep the original request pending.');
+}
+export function solanaExecutionOutcome(err:unknown):SolanaOutcomeProof {
+  if(err===null)return {outcome:'success',err:null};
+  if(typeof err==='string'&&TRANSACTION_ERROR_UNITS.has(err))return {outcome:'failure',err};
+  if(object(err)&&Object.keys(err).length===1){
+    if(owns(err,'InstructionError')&&Array.isArray(err.InstructionError)&&err.InstructionError.length===2&&boundedUint(err.InstructionError[0],255))return {outcome:'failure',err:{InstructionError:[err.InstructionError[0],instructionError(err.InstructionError[1])]}};
+    if(owns(err,'DuplicateInstruction')&&boundedUint(err.DuplicateInstruction,255))return {outcome:'failure',err:{DuplicateInstruction:err.DuplicateInstruction}};
+    for(const variant of ['InsufficientFundsForRent','ProgramExecutionTemporarilyRestricted']){
+      const data=err[variant];if(owns(err,variant)&&object(data)&&Object.keys(data).length===1&&owns(data,'account_index')&&boundedUint(data.account_index,255))return {outcome:'failure',err:{[variant]:{account_index:data.account_index}}};
+    }
+  }
+  throw new Error('Missing or unsupported Solana execution error. Keep the original request pending.');
+}
+function rpcOutcome(value:Record<string,any>):SolanaOutcomeProof {
+  if(!owns(value,'err'))throw new Error('Solana execution error field is missing. Keep the original request pending.');
+  const result=solanaExecutionOutcome(value.err);
+  // Some RPC versions include the deprecated Serde Result in addition to err.
+  // If supplied, it is another assertion and cannot contradict err.
+  if(owns(value,'status')){
+    const legacy=value.status;
+    if(!object(legacy)||Object.keys(legacy).length!==1)throw new Error('Malformed legacy Solana status. Keep the original request pending.');
+    const other=owns(legacy,'Ok')&&legacy.Ok===null?solanaExecutionOutcome(null):owns(legacy,'Err')&&legacy.Err!==null?solanaExecutionOutcome(legacy.Err):null;
+    if(!other||other.outcome!==result.outcome||JSON.stringify(other.err)!==JSON.stringify(result.err))throw new Error('Conflicting Solana error evidence. Keep the original request pending.');
+  }
+  return result;
+}
+export function solanaFinalizedProof(meta:unknown,slot:unknown):SolanaFinalizedProof {
+  if(!object(meta)||!boundedUint(slot,Number.MAX_SAFE_INTEGER)||slot<1)throw new Error('Finalized Solana metadata is missing. Keep the original request pending.');
+  return {...rpcOutcome(meta),slot,confirmationStatus:'finalized'};
+}
+export function solanaSignatureProof(value:unknown):SolanaSignatureProof|null {
+  if(value===null)return null; // An explicit cache miss is different from omission.
+  if(!object(value)||!boundedUint(value.slot,Number.MAX_SAFE_INTEGER)||value.slot<1||!owns(value,'confirmations')
+    ||value.confirmations!==null&&!boundedUint(value.confirmations,Number.MAX_SAFE_INTEGER))throw new Error('Signature status evidence is missing. Keep the original request pending.');
+  const confirmationStatus=owns(value,'confirmationStatus')?value.confirmationStatus:(value.confirmations===null?'finalized':undefined);
+  if(!['processed','confirmed','finalized'].includes(confirmationStatus)||confirmationStatus==='finalized'&&value.confirmations!==null
+    ||confirmationStatus!=='finalized'&&value.confirmations===null)throw new Error('Signature finality is unsupported. Keep the original request pending.');
+  return {...rpcOutcome(value),slot:value.slot,confirmations:value.confirmations,confirmationStatus};
+}
+export function assertSolanaStatusAgreement(transaction:SolanaFinalizedProof,status:SolanaSignatureProof|null):void {
+  if(status!==null&&(status.confirmationStatus!=='finalized'||status.slot!==transaction.slot||status.outcome!==transaction.outcome||JSON.stringify(status.err)!==JSON.stringify(transaction.err)))throw new Error('Conflicting finalized Solana status. Keep the original request pending.');
+}
+export function validateSolanaFinalizedProof(value:unknown,status:unknown):SolanaFinalizedProof {
+  if(!object(value)||!owns(value,'outcome')||value.confirmationStatus!=='finalized')throw new Error('Explicit finalized Solana outcome is missing. Keep the original request pending.');
+  const transaction=solanaFinalizedProof(value,value.slot);
+  if(value.outcome!==transaction.outcome)throw new Error('Solana outcome contradicts its error proof. Keep the original request pending.');
+  const signature=validateSolanaSignatureProof(status);
+  assertSolanaStatusAgreement(transaction,signature);return transaction;
+}
+export function validateSolanaSignatureProof(value:unknown):SolanaSignatureProof|null {
+  const proof=solanaSignatureProof(value);
+  if(proof!==null&&(!object(value)||!owns(value,'outcome')||value.outcome!==proof.outcome))throw new Error('Explicit signature outcome is missing. Keep the original request pending.');
+  return proof;
+}
+
 export type SolanaQuote = {
   inputMint: string; outputMint: string; inAmount: string; outAmount: string; otherAmountThreshold: string;
   swapMode: 'ExactIn'; slippageBps: number; priceImpactPct: string; platformFee: {amount: string; feeBps: number};
